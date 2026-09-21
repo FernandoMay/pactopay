@@ -14,17 +14,17 @@ export function ConnectWalletModal({ isOpen, onClose }: ConnectWalletModalProps)
 
   const handleConnect = async () => {
     setStep("connecting");
-    try {
-      await connect();
+    const success = await connect();
+    if (success) {
       setStep("success");
       setTimeout(onClose, 1500);
-    } catch {
+    } else {
       setStep("error");
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-surface-container-lowest rounded-2xl max-w-md w-full p-space-lg shadow-xl relative">
         {/* Close button */}
         <button

@@ -7,7 +7,7 @@ interface UseFreighterReturn {
   isConnecting: boolean;
   isConnected: boolean;
   error: string | null;
-  connect: () => Promise<void>;
+  connect: () => Promise<boolean>;
   disconnect: () => void;
   refreshBalance: () => Promise<void>;
 }
@@ -34,10 +34,10 @@ export function useFreighter(): UseFreighterReturn {
     }
   }, []);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (): Promise<boolean> => {
     if (!isFreighterAvailable()) {
       setError("Freighter no está instalado. Instálalo desde freighter.app");
-      return;
+      return false;
     }
 
     setIsConnecting(true);
@@ -48,8 +48,11 @@ export function useFreighter(): UseFreighterReturn {
       const balance = await getUsdcBalance(info.address);
       setWallet({ ...info, balance });
       localStorage.setItem("pactopay_wallet", "connected");
-    } catch (err: any) {
-      setError(err.message || "Error al conectar billetera");
+      return true;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg || "Error al conectar billetera");
+      return false;
     } finally {
       setIsConnecting(false);
     }

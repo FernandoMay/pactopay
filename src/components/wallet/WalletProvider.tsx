@@ -7,7 +7,7 @@ interface WalletContextType {
   isConnecting: boolean;
   isConnected: boolean;
   error: string | null;
-  connect: () => Promise<void>;
+  connect: () => Promise<boolean>;
   disconnect: () => void;
   refreshBalance: () => Promise<void>;
 }
@@ -17,7 +17,7 @@ const WalletContext = createContext<WalletContextType>({
   isConnecting: false,
   isConnected: false,
   error: null,
-  connect: async () => {},
+  connect: async () => false,
   disconnect: () => {},
   refreshBalance: async () => {},
 });

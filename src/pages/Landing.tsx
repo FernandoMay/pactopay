@@ -16,7 +16,6 @@ export function Landing() {
     const pactoTotal = amount - fee;
 
     const setIfPresent = (id: string, value: string) => {
-      document.getElementById(id)?.setAttribute("textContent", value);
       const el = document.getElementById(id);
       if (el) el.textContent = value;
     };

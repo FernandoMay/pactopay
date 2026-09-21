@@ -13,22 +13,16 @@ export function Footer() {
               </span>
             </div>
             <p className="font-body-sm text-body-sm text-on-surface-variant max-w-xl">
-              PactoPay © 2025. Plataforma de pagos internacionales y custodia protegida en
+              PactoPay © {new Date().getFullYear()}. Plataforma de pagos internacionales y custodia protegida en
               Stellar. Sin comisiones ocultas.
             </p>
           </div>
           <nav className="flex flex-wrap items-center justify-center gap-space-md font-body-sm text-body-sm text-on-surface-variant">
-            <a className="hover:text-on-surface transition-colors" href="#">
-              Términos de Servicio
-            </a>
+            <span className="text-on-surface-variant">Términos de Servicio</span>
             <span className="text-outline-variant">•</span>
-            <a className="hover:text-on-surface transition-colors" href="#">
-              Privacidad y Seguridad
-            </a>
+            <span className="text-on-surface-variant">Privacidad y Seguridad</span>
             <span className="text-outline-variant">•</span>
-            <a className="hover:text-on-surface transition-colors" href="#">
-              Cómo Funciona la Custodia
-            </a>
+            <span className="text-on-surface-variant">Cómo Funciona la Custodia</span>
             <span className="text-outline-variant">•</span>
             <a
               className="hover:text-on-surface transition-colors inline-flex items-center gap-1"
