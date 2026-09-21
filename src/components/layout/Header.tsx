@@ -17,9 +17,20 @@ export function Header() {
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
+  const isMainnet = wallet?.network === "mainnet";
+  const networkLabel = wallet?.network === "testnet" ? "Testnet" : wallet?.network === "mainnet" ? "Mainnet" : "Testnet";
+
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+      {/* Mainnet warning banner */}
+      {isConnected && isMainnet && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-error text-on-error px-4 py-2 text-center font-label-md text-label-md font-semibold flex items-center justify-center gap-2">
+          <span className="material-symbols-outlined text-[18px]">warning</span>
+          Estás en Mainnet — esta dApp opera en Testnet. Cambiá a Testnet en Freighter para usar PactoPay.
+        </div>
+      )}
+
+      <header className={`fixed left-0 right-0 z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] ${isConnected && isMainnet ? "top-10" : "top-0"}`}>
         <div className="h-16 max-w-7xl mx-auto px-gutter flex items-center justify-between gap-space-md">
           {/* Logo + Network Badge */}
           <div className="flex items-center gap-space-md">
@@ -33,9 +44,9 @@ export function Header() {
                 PactoPay
               </span>
             </Link>
-            <div className="hidden sm:flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">
-              <span className="w-2 h-2 rounded-full bg-secondary inline-block"></span>
-              <span>Red Stellar (Modo de Prueba)</span>
+            <div className={`hidden sm:flex items-center gap-space-xs px-space-sm py-1 rounded-full font-label-sm text-label-sm ${isMainnet ? 'bg-error-container text-error' : 'bg-surface-container-high text-on-surface-variant'}`}>
+              <span className={`w-2 h-2 rounded-full ${isMainnet ? 'bg-error' : 'bg-secondary'} inline-block`}></span>
+              <span>Red Stellar ({networkLabel})</span>
             </div>
           </div>
 
@@ -75,12 +86,16 @@ export function Header() {
                   </span>
                 </button>
                 {showDropdown && (
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-surface-container-lowest rounded-xl shadow-lg border border-outline-variant/20 overflow-hidden z-50">
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-surface-container-lowest rounded-xl shadow-lg border border-outline-variant/20 overflow-hidden z-50">
                     <div className="p-3 border-b border-outline-variant/20">
                       <p className="font-label-sm text-label-sm text-on-surface-variant">Conectado como</p>
                       <p className="font-mono text-sm text-on-surface font-semibold truncate">
                         {wallet?.address}
                       </p>
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <span className={`w-2 h-2 rounded-full ${isMainnet ? 'bg-error' : 'bg-secondary'}`}></span>
+                        <span className="font-label-sm text-label-sm text-on-surface-variant">{networkLabel}</span>
+                      </div>
                     </div>
                     <button
                       onClick={() => {

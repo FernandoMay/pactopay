@@ -6,6 +6,7 @@ interface WalletContextType {
   wallet: WalletInfo | null;
   isConnecting: boolean;
   isConnected: boolean;
+  isFreighterInstalled: boolean;
   error: string | null;
   connect: () => Promise<boolean>;
   disconnect: () => void;
@@ -16,6 +17,7 @@ const WalletContext = createContext<WalletContextType>({
   wallet: null,
   isConnecting: false,
   isConnected: false,
+  isFreighterInstalled: false,
   error: null,
   connect: async () => false,
   disconnect: () => {},

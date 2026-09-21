@@ -1,20 +1,30 @@
 import { useState } from "react";
 import { formatLatamCurrency } from "../lib/format";
 import { useWallet } from "../components/wallet/WalletProvider";
+import { TxFeedback, useTxFeedback } from "../components/ui/TxFeedback";
 
 export function PagarCustodia() {
   const { isConnected, wallet } = useWallet();
   const [depositing, setDepositing] = useState(false);
   const [deposited, setDeposited] = useState(false);
+  const { txState, startSigning, startSubmitting, succeed, fail, reset } = useTxFeedback();
 
   const amount = 1500;
 
-  const handleDeposit = () => {
+  const handleDeposit = async () => {
     setDepositing(true);
+    startSigning();
+
+    // Simulate: signing phase (2s), then submitting (2s), then success
     setTimeout(() => {
-      setDepositing(false);
-      setDeposited(true);
-    }, 1500);
+      startSubmitting();
+      setTimeout(() => {
+        const mockHash = `TX${Date.now().toString(36).toUpperCase()}`;
+        succeed(mockHash);
+        setDepositing(false);
+        setDeposited(true);
+      }, 2000);
+    }, 2000);
   };
 
   return (
@@ -29,7 +39,7 @@ export function PagarCustodia() {
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
-              <span className="font-medium text-on-surface">Red Stellar Mainnet</span>
+              <span className="font-medium text-on-surface">Red Stellar (Testnet)</span>
             </div>
           </div>
 
@@ -303,6 +313,14 @@ export function PagarCustodia() {
           </div>
         </div>
       </div>
+
+      {/* Transaction Feedback Toast */}
+      <TxFeedback
+        status={txState.status}
+        txHash={txState.txHash}
+        error={txState.error}
+        onDismiss={reset}
+      />
     </div>
   );
 }

@@ -7,12 +7,16 @@ interface ConnectWalletModalProps {
 }
 
 export function ConnectWalletModal({ isOpen, onClose }: ConnectWalletModalProps) {
-  const { connect, isConnecting, error } = useWallet();
+  const { connect, isConnecting, error, isFreighterInstalled } = useWallet();
   const [step, setStep] = useState<"choose" | "connecting" | "success" | "error">("choose");
 
   if (!isOpen) return null;
 
   const handleConnect = async () => {
+    if (!isFreighterInstalled) {
+      setStep("error");
+      return;
+    }
     setStep("connecting");
     const success = await connect();
     if (success) {
@@ -46,11 +50,36 @@ export function ConnectWalletModal({ isOpen, onClose }: ConnectWalletModalProps)
               Conecta tu billetera Stellar para crear facturas, depositar custodia y recibir pagos en USDC.
             </p>
 
+            {/* Freighter not installed banner */}
+            {!isFreighterInstalled && (
+              <div className="mb-space-md p-space-md rounded-xl bg-tertiary-fixed/20 border border-tertiary-fixed/40 flex flex-col items-center gap-space-sm text-center">
+                <span className="material-symbols-outlined text-[32px] text-tertiary">download</span>
+                <div>
+                  <p className="font-title-md text-title-md font-semibold text-on-surface">
+                    Freighter no detectado
+                  </p>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
+                    Necesitás la extensión de Freighter para conectar tu billetera Stellar.
+                  </p>
+                </div>
+                <a
+                  href="https://freighter.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-tertiary text-on-tertiary font-label-lg text-label-lg font-semibold hover:bg-tertiary/90 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+                  Instalar Freighter
+                </a>
+              </div>
+            )}
+
             {/* Wallet options */}
             <div className="flex flex-col gap-space-sm">
               <button
                 onClick={handleConnect}
-                className="w-full flex items-center gap-3 p-4 rounded-xl bg-surface-container-low hover:bg-surface-container transition-all border border-outline-variant/30 group"
+                disabled={!isFreighterInstalled}
+                className="w-full flex items-center gap-3 p-4 rounded-xl bg-surface-container-low hover:bg-surface-container transition-all border border-outline-variant/30 group disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="w-10 h-10 rounded-lg bg-[#08064D] flex items-center justify-center shrink-0">
                   <span className="text-white font-bold text-sm">F</span>
@@ -70,7 +99,8 @@ export function ConnectWalletModal({ isOpen, onClose }: ConnectWalletModalProps)
 
               <button
                 onClick={handleConnect}
-                className="w-full flex items-center gap-3 p-4 rounded-xl bg-surface-container-low hover:bg-surface-container transition-all border border-outline-variant/30 group"
+                disabled={!isFreighterInstalled}
+                className="w-full flex items-center gap-3 p-4 rounded-xl bg-surface-container-low hover:bg-surface-container transition-all border border-outline-variant/30 group disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="w-10 h-10 rounded-lg bg-[#16161A] flex items-center justify-center shrink-0">
                   <span className="text-white font-bold text-sm">L</span>
@@ -90,7 +120,8 @@ export function ConnectWalletModal({ isOpen, onClose }: ConnectWalletModalProps)
 
               <button
                 onClick={handleConnect}
-                className="w-full flex items-center gap-3 p-4 rounded-xl bg-surface-container-low hover:bg-surface-container transition-all border border-outline-variant/30 group"
+                disabled={!isFreighterInstalled}
+                className="w-full flex items-center gap-3 p-4 rounded-xl bg-surface-container-low hover:bg-surface-container transition-all border border-outline-variant/30 group disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="w-10 h-10 rounded-lg bg-[#2D1B69] flex items-center justify-center shrink-0">
                   <span className="text-white font-bold text-sm">V</span>
@@ -111,13 +142,13 @@ export function ConnectWalletModal({ isOpen, onClose }: ConnectWalletModalProps)
 
             <p className="font-body-sm text-body-sm text-on-surface-variant text-center mt-space-md leading-relaxed">
               Al conectar, aceptas los{" "}
-              <a href="#" className="text-primary font-semibold hover:underline">
+              <span className="text-primary font-semibold">
                 Términos de Servicio
-              </a>{" "}
+              </span>{" "}
               y la{" "}
-              <a href="#" className="text-primary font-semibold hover:underline">
+              <span className="text-primary font-semibold">
                 Política de Privacidad
-              </a>
+              </span>
               .
             </p>
           </>
@@ -164,12 +195,25 @@ export function ConnectWalletModal({ isOpen, onClose }: ConnectWalletModalProps)
             <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 text-center">
               {error || "No se pudo conectar la billetera. Asegurate de tener Freighter instalado."}
             </p>
-            <button
-              onClick={() => setStep("choose")}
-              className="mt-space-md px-4 py-2 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg font-semibold"
-            >
-              Reintentar
-            </button>
+            <div className="flex gap-space-sm mt-space-md">
+              <button
+                onClick={() => setStep("choose")}
+                className="px-4 py-2 rounded-lg bg-surface-container text-on-surface font-label-lg text-label-lg font-semibold hover:bg-surface-container-high transition-colors"
+              >
+                Reintentar
+              </button>
+              {!isFreighterInstalled && (
+                <a
+                  href="https://freighter.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg font-semibold hover:bg-primary/90 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                  Instalar Freighter
+                </a>
+              )}
+            </div>
           </div>
         )}
       </div>

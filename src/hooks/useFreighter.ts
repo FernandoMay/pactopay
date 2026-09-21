@@ -6,6 +6,7 @@ interface UseFreighterReturn {
   wallet: WalletInfo | null;
   isConnecting: boolean;
   isConnected: boolean;
+  isFreighterInstalled: boolean;
   error: string | null;
   connect: () => Promise<boolean>;
   disconnect: () => void;
@@ -16,6 +17,15 @@ export function useFreighter(): UseFreighterReturn {
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isFreighterInstalled, setIsFreighterInstalled] = useState(false);
+
+  // Check Freighter availability on mount and periodically
+  useEffect(() => {
+    const check = () => setIsFreighterInstalled(isFreighterAvailable());
+    check();
+    const interval = setInterval(check, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-connect if previously connected
   useEffect(() => {
@@ -36,7 +46,7 @@ export function useFreighter(): UseFreighterReturn {
 
   const connect = useCallback(async (): Promise<boolean> => {
     if (!isFreighterAvailable()) {
-      setError("Freighter no está instalado. Instálalo desde freighter.app");
+      setError("Freighter no está instalado. Instalalo desde freighter.app");
       return false;
     }
 
@@ -74,6 +84,7 @@ export function useFreighter(): UseFreighterReturn {
     wallet,
     isConnecting,
     isConnected: !!wallet,
+    isFreighterInstalled,
     error,
     connect,
     disconnect,

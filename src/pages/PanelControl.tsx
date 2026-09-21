@@ -1,18 +1,26 @@
 import { useState } from "react";
 import { formatLatamCurrency } from "../lib/format";
+import { TxFeedback, useTxFeedback } from "../components/ui/TxFeedback";
 
 export function PanelControl() {
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [released, setReleased] = useState(false);
+  const { txState, startSigning, startSubmitting, succeed, fail, reset } = useTxFeedback();
 
   const handleRelease = () => {
     setReleasing(true);
+    startSigning();
     setTimeout(() => {
-      setReleasing(false);
-      setShowReleaseModal(false);
-      setReleased(true);
-    }, 1500);
+      startSubmitting();
+      setTimeout(() => {
+        const mockHash = `REL${Date.now().toString(36).toUpperCase()}`;
+        succeed(mockHash);
+        setReleasing(false);
+        setShowReleaseModal(false);
+        setReleased(true);
+      }, 2000);
+    }, 2000);
   };
 
   return (
@@ -513,6 +521,12 @@ export function PanelControl() {
           </div>
         </div>
       )}
+      <TxFeedback
+        status={txState.status}
+        txHash={txState.txHash}
+        error={txState.error}
+        onDismiss={reset}
+      />
     </div>
   );
 }
