@@ -1,33 +1,36 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 const FILLED_STYLE = { fontVariationSettings: "'FILL' 1" } as const;
 
-export function Landing() {
-  const [amount, setAmount] = useState(2500);
-
-  useEffect(() => {
+function useCalculator(amount: number) {
+  return useMemo(() => {
     const fee = amount * 0.005;
     const swiftInter = 45;
     const swiftReceiving = 25;
     const swiftSpread = amount * 0.035;
     const swiftTotal = amount - swiftInter - swiftReceiving - swiftSpread;
-
     const pactoTotal = amount - fee;
+    const savings = pactoTotal - swiftTotal;
 
-    const setIfPresent = (id: string, value: string) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = value;
+    const fmt = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtInt = (v: number) => v.toLocaleString("en-US");
+
+    return {
+      displayAmount: fmtInt(amount),
+      swiftInter: `~$${fmt(swiftInter)}`,
+      swiftSpread: `~$${fmt(swiftSpread)}`,
+      swiftTotal: `$${fmt(swiftTotal)}`,
+      pactoFee: `$${fmt(fee)}`,
+      pactoTotal: `$${fmt(pactoTotal)}`,
+      pactoSavings: `+$${fmt(savings)}`,
     };
-
-    setIfPresent("displayAmount", amount.toLocaleString("en-US"));
-    setIfPresent("swiftInter", `~$${swiftInter.toFixed(2)} USD`);
-    setIfPresent("swiftSpread", `~$${swiftSpread.toFixed(2)} USD`);
-    setIfPresent("swiftTotal", `$${swiftTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })} USD`);
-    setIfPresent("pactoFee", `$${fee.toLocaleString("en-US", { minimumFractionDigits: 2 })} USD`);
-    setIfPresent("pactoTotal", `$${pactoTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })} USD`);
-    setIfPresent("pactoSavings", `+$${(pactoTotal - swiftTotal).toLocaleString("en-US", { minimumFractionDigits: 2 })} USD`);
   }, [amount]);
+}
+
+export function Landing() {
+  const [amount, setAmount] = useState(2500);
+  const calc = useCalculator(amount);
 
   return (
     <main className="w-full pt-20 bg-surface min-h-screen">
@@ -367,8 +370,8 @@ export function Landing() {
                   </label>
                   <div className="flex items-center gap-1 bg-surface-container px-space-md py-1.5 rounded-lg">
                     <span className="font-label-lg text-label-lg text-on-surface-variant font-semibold">$</span>
-                    <span className="font-title-lg text-title-lg text-primary font-bold" id="displayAmount">
-                      {amount.toLocaleString("en-US")}
+                    <span className="font-title-lg text-title-lg text-primary font-bold">
+                      {calc.displayAmount}
                     </span>
                     <span className="font-label-sm text-label-sm text-on-surface-variant ml-1 font-semibold">USDC</span>
                   </div>
@@ -402,7 +405,7 @@ export function Landing() {
                     <div className="flex flex-col gap-2 font-body-sm text-body-sm text-on-surface-variant pt-space-xs">
                       <div className="flex justify-between">
                         <span>Costo bancos intermediarios</span>
-                        <span className="font-medium text-on-surface" id="swiftInter">~$45.00 USD</span>
+                        <span className="font-medium text-on-surface">{calc.swiftInter}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Comisión banco receptor local</span>
@@ -410,7 +413,7 @@ export function Landing() {
                       </div>
                       <div className="flex justify-between">
                         <span>Spread cambiario desfavorable (~3.5%)</span>
-                        <span className="font-medium text-on-surface" id="swiftSpread">~$87.50 USD</span>
+                        <span className="font-medium text-on-surface">{calc.swiftSpread}</span>
                       </div>
                       <div className="flex justify-between text-outline">
                         <span>Tiempo de acreditación</span>
@@ -421,7 +424,7 @@ export function Landing() {
                   <div className="pt-space-sm bg-surface-container-highest/60 -mx-space-md -mb-space-md p-space-md rounded-b-xl flex items-center justify-between">
                     <div>
                       <span className="font-label-sm text-label-sm text-on-surface-variant">Dinero total recibido:</span>
-                      <div className="font-title-lg text-title-lg text-on-surface font-bold" id="swiftTotal">$2,342.50 USD</div>
+                      <div className="font-title-lg text-title-lg text-on-surface font-bold">{calc.swiftTotal}</div>
                     </div>
                     <span className="px-2 py-1 bg-surface-container rounded text-error font-label-sm text-label-sm font-semibold">Pierdes ~6.3%</span>
                   </div>
@@ -440,7 +443,7 @@ export function Landing() {
                     <div className="flex flex-col gap-2 font-body-sm text-body-sm text-on-surface-variant pt-space-xs">
                       <div className="flex justify-between">
                         <span>Comisión PactoPay (0.5% plano)</span>
-                        <span className="font-medium text-on-surface" id="pactoFee">$12.50 USD</span>
+                        <span className="font-medium text-on-surface">{calc.pactoFee}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Costo de red Stellar</span>
@@ -459,11 +462,11 @@ export function Landing() {
                   <div className="pt-space-sm bg-surface-container-lowest -mx-space-md -mb-space-md p-space-md rounded-b-xl flex items-center justify-between">
                     <div>
                       <span className="font-label-sm text-label-sm text-on-surface-variant">Dinero total recibido:</span>
-                      <div className="font-title-lg text-title-lg text-primary font-bold" id="pactoTotal">$2,487.50 USD</div>
+                      <div className="font-title-lg text-title-lg text-primary font-bold">{calc.pactoTotal}</div>
                     </div>
                     <div className="flex flex-col items-end">
                       <span className="font-label-sm text-label-sm text-secondary font-bold">Ahorras</span>
-                      <span className="font-title-md text-title-md text-secondary font-bold" id="pactoSavings">+$145.00 USD</span>
+                      <span className="font-title-md text-title-md text-secondary font-bold">{calc.pactoSavings}</span>
                     </div>
                   </div>
                 </div>
