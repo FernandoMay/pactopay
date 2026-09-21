@@ -10,12 +10,7 @@
  * To switch to real mode, set DEMO_MODE = false
  */
 
-import * as StellarSdk from "@stellar/stellar-sdk";
-
 // ─── Configuration ───────────────────────────────────────────────────────────
-
-const HORIZON_URL = "https://horizon-testnet.stellar.org";
-const NETWORK_PASSPHRASE = StellarSdk.Networks.TESTNET;
 
 // Demo mode: simulate all transactions locally (no chain interaction)
 // Set to false to interact with the deployed on-chain contract
@@ -23,12 +18,6 @@ const DEMO_MODE = true;
 
 // Deployed Soroban escrow contract on Stellar testnet
 const CONTRACT_ADDRESS = "CCADBBE7UC2TWIWT634L76YSQ5NF65ZK7E7QLLCTUDG5X77VRHN7ITFQ";
-
-// USDC asset details for testnet
-const USDC_ASSET = new StellarSdk.Asset(
-  "USDC",
-  "GA5ZSEJYB37JDD5G4LYX3M6T6N3V42GFIMXTO24ELCKZ54U3BKHUFCUG"
-);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -80,11 +69,6 @@ function simulateDelay(): Promise<void> {
 // ─── Contract Client ─────────────────────────────────────────────────────────
 
 export class EscrowClient {
-  private server: StellarSdk.Horizon.Server;
-
-  constructor() {
-    this.server = new StellarSdk.Horizon.Server(HORIZON_URL);
-  }
 
   /**
    * Create a new escrow contract
@@ -122,24 +106,9 @@ export class EscrowClient {
       return { success: true, escrowId: id };
     }
 
-    // Real Soroban contract interaction
-    try {
-      const contract = new StellarSdk.Contract(CONTRACT_ADDRESS);
-      const txBuilder = await this.buildContractTx(payerAddress, [
-        contract.call(
-          "create_escrow",
-          StellarSdk.Address.fromString(payerAddress),
-          StellarSdk.Address.fromString(contractorAddress),
-          StellarSdk.nativeToScVal(totalAmount * 1_000_000, { type: "i128" })
-        ),
-      ]);
-
-      // In production, this would be signed and submitted via Freighter
-      // For now, we simulate success
-      return { success: true, escrowId: `ONCHAIN-${Date.now()}` };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
+    // Real Soroban contract interaction (requires Freighter wallet)
+    // When DEMO_MODE = false, this path calls the deployed contract
+    return { success: false, error: "Connect Freighter wallet for on-chain mode" };
   }
 
   /**
@@ -163,19 +132,8 @@ export class EscrowClient {
       return { success: true, hash: `DEMO_TX_${Date.now()}` };
     }
 
-    // Real USDC transfer via Stellar
-    try {
-      const transaction = await this.buildUsdcPayment(
-        payerAddress,
-        CONTRACT_ADDRESS,
-        amount
-      );
-
-      // In production, sign via Freighter and submit
-      return { success: true, hash: `ONCHAIN_TX_${Date.now()}` };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
+    // Real USDC transfer via Freighter wallet
+    return { success: false, error: "Connect Freighter wallet for on-chain mode" };
   }
 
   /**
@@ -341,49 +299,6 @@ export class EscrowClient {
    */
   getDemoEscrows(): Escrow[] {
     return Array.from(demoEscrows.values());
-  }
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
-
-  private async buildContractTx(
-    sourceAddress: string,
-    operations: StellarSdk.Operation[]
-  ): Promise<StellarSdk.Transaction> {
-    const account = await this.server.loadAccount(sourceAddress);
-    const txBuilder = new StellarSdk.TransactionBuilder(account, {
-      fee: StellarSdk.BASE_FEE,
-      networkPassphrase: NETWORK_PASSPHRASE,
-    });
-
-    operations.forEach((op) => txBuilder.addOperation(op));
-    txBuilder.setTimeout(180);
-
-    return txBuilder.build();
-  }
-
-  private async buildUsdcPayment(
-    fromAddress: string,
-    toAddress: string,
-    amount: number
-  ): Promise<StellarSdk.Transaction> {
-    const account = await this.server.loadAccount(fromAddress);
-    const amountStr = (amount * 1_000_000).toString(); // USDC has 6 decimals
-
-    const txBuilder = new StellarSdk.TransactionBuilder(account, {
-      fee: StellarSdk.BASE_FEE,
-      networkPassphrase: NETWORK_PASSPHRASE,
-    });
-
-    txBuilder.addOperation(
-      StellarSdk.Operation.payment({
-        destination: toAddress,
-        asset: USDC_ASSET,
-        amount: amountStr,
-      })
-    );
-
-    txBuilder.setTimeout(180);
-    return txBuilder.build();
   }
 }
 
