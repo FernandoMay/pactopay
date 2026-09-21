@@ -1,5 +1,6 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { Layout } from "./components/layout/Layout";
+import { Landing } from "./pages/Landing";
 import { CrearFactura } from "./pages/CrearFactura";
 import { PagarCustodia } from "./pages/PagarCustodia";
 import { PanelControl } from "./pages/PanelControl";
@@ -9,7 +10,7 @@ export function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Navigate to="/crear-factura" replace />} />
+        <Route path="/" element={<Landing />} />
         <Route path="/crear-factura" element={<CrearFactura />} />
         <Route path="/pagar-custodia" element={<PagarCustodia />} />
         <Route path="/panel-de-control" element={<PanelControl />} />
