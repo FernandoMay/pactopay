@@ -7,10 +7,13 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-soroban-sdk = "21.0.0"
+soroban-sdk = "27.0.0"
+serde = { version = ">=1.0.185, <1.0.220", default-features = false }
+serde_json = { version = ">=1.0.100, <1.0.130", default-features = false, features = ["alloc"] }
+memchr = { version = ">=2.5.0, <2.8.0", default-features = false }
 
 [dev-dependencies]
-soroban-sdk = { version = "21.0.0", features = ["testutils"] }
+soroban-sdk = { version = "27.0.0", features = ["testutils"] }
 
 [profile.release]
 opt-level = "z"

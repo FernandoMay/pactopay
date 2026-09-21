@@ -4,10 +4,10 @@
  * Connects the React frontend to the Soroban escrow smart contract.
  * Supports both demo mode (simulated) and real mode (on-chain).
  * 
- * To switch to real mode:
- * 1. Deploy contracts/escrow to Stellar testnet
- * 2. Set CONTRACT_ADDRESS in the env
- * 3. Set DEMO_MODE = false
+ * Deployed contract: CCADBBE7UC2TWIWT634L76YSQ5NF65ZK7E7QLLCTUDG5X77VRHN7ITFQ
+ * Explorer: https://stellar.expert/explorer/testnet/contract/CCADBBE7UC2TWIWT634L76YSQ5NF65ZK7E7QLLCTUDG5X77VRHN7ITFQ
+ * 
+ * To switch to real mode, set DEMO_MODE = false
  */
 
 import * as StellarSdk from "@stellar/stellar-sdk";
@@ -17,11 +17,12 @@ import * as StellarSdk from "@stellar/stellar-sdk";
 const HORIZON_URL = "https://horizon-testnet.stellar.org";
 const NETWORK_PASSPHRASE = StellarSdk.Networks.TESTNET;
 
-// Set to false after deploying the contract and setting the address
+// Demo mode: simulate all transactions locally (no chain interaction)
+// Set to false to interact with the deployed on-chain contract
 const DEMO_MODE = true;
 
-// Contract address on testnet (replace after deploy)
-const CONTRACT_ADDRESS = "CONTRACT_ADDRESS_HERE";
+// Deployed Soroban escrow contract on Stellar testnet
+const CONTRACT_ADDRESS = "CCADBBE7UC2TWIWT634L76YSQ5NF65ZK7E7QLLCTUDG5X77VRHN7ITFQ";
 
 // USDC asset details for testnet
 const USDC_ASSET = new StellarSdk.Asset(
