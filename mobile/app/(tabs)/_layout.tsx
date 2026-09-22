@@ -6,6 +6,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        animation: 'slide_from_right',
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.outline,
         tabBarStyle: {
@@ -24,7 +25,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Inicio',
-          tabBarIcon: ({ color }) => null, // TODO: add Material icon
+          tabBarIcon: ({ color }) => null, // Material icon to be added
         }}
       />
       <Tabs.Screen

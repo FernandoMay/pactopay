@@ -1,10 +1,19 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { useWallet } from '@/components/wallet';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { Header } from '@/components/Header';
-import { Card } from '@/components/Card';
 
 export default function ProfileScreen() {
+  const {
+    isConnected,
+    address,
+    network,
+    balance,
+    connectWallet,
+    disconnect,
+  } = useWallet();
+
   const menuItems = [
     { icon: '👤', label: 'Datos personales', arrow: '→' },
     { icon: '🔐', label: 'Seguridad', arrow: '→' },
@@ -17,7 +26,14 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Header title="Cuenta" />
+      <Header
+        title="Cuenta"
+        isConnected={isConnected}
+        address={isConnected ? address?.slice(0, 6) + '...' : undefined}
+        network={network || 'testnet'}
+        onConnect={connectWallet}
+        onDisconnect={disconnect}
+      />
 
       {/* Profile Header */}
       <Card style={styles.profileCard}>

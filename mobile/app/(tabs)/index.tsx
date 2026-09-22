@@ -1,20 +1,38 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useWallet } from '@/components/wallet';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { Header } from '@/components/Header';
 import { Card, StatCard } from '@/components/Card';
 import { EscrowCard } from '@/components/EscrowCard';
 
 export default function DashboardScreen() {
+  const {
+    isConnected,
+    address,
+    network,
+    balance,
+    connectWallet,
+    disconnect,
+  } = useWallet();
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Header showBreadline title="Dashboard" />
+      <Header
+        showBreadline
+        title="Dashboard"
+        isConnected={isConnected}
+        address={address}
+        network={network || 'testnet'}
+        onConnect={connectWallet}
+        onDisconnect={disconnect}
+      />
 
       {/* Vault Balance */}
       <Card style={styles.vault}>
         <Text style={styles.vaultLabel}>Balance in vault</Text>
-        <Text style={styles.vaultAmount}>$0.00 USDC</Text>
-        <Text style={styles.vaultSub}>0 contracts</Text>
+        <Text style={styles.vaultAmount}>{balance || '$0.00'} USDC</Text>
+        <Text style={styles.vaultSub}>{isConnected ? '1 contract' : '0 contracts'}</Text>
       </Card>
 
       {/* Stats Row */}

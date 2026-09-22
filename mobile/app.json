@@ -1,5 +1,6 @@
 {
   "expo": {
+  "sdk": "57",
     "name": "PactoPay",
     "slug": "pactopay-mobile",
     "version": "1.0.0",
