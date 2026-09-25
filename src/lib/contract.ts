@@ -19,6 +19,7 @@ import {
   rpc,
   Horizon,
 } from "@stellar/stellar-sdk";
+import { signTransaction as freighterSignTransaction } from "@stellar/freighter-api";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -139,19 +140,22 @@ function getHorizonServer(): Horizon.Server {
 
 // ─── Freighter Helpers ──────────────────────────────────────────────────────
 
-/** Check if Freighter is installed in the browser */
+/**
+ * Sync best-effort check for Freighter: true once the extension content
+ * script has injected its `freighterApi` bridge. Signing itself always goes
+ * through the official `@stellar/freighter-api` package.
+ */
 function isFreighterAvailable(): boolean {
-  return typeof window !== "undefined" && !!(window as any).freighter;
+  return typeof window !== "undefined" && !!(window as any).freighterApi;
 }
 
-/** Get the Freighter wallet instance — throws if not installed */
-function getFreighter(): any {
+/** Throw a clear Spanish error when Freighter is not installed */
+function requireFreighter(): void {
   if (!isFreighterAvailable()) {
     throw new Error(
-      "Freighter wallet not installed. Install it from freighter.app"
+      "Billetera Freighter no detectada. Instalá la extensión desde freighter.app"
     );
   }
-  return (window as any).freighter;
 }
 
 // ─── ScVal Encoding Helpers ─────────────────────────────────────────────────
@@ -278,7 +282,7 @@ async function buildSignAndSubmit(
     const rpcServer = getRpcServer();
     const horizonServer = getHorizonServer();
     const contract = new Contract(CONTRACT_ADDRESS);
-    const freighter = getFreighter();
+    requireFreighter();
 
     // Load the source account from Horizon (provides sequence number)
     const account = await horizonServer.loadAccount(sourceAddress);
@@ -297,10 +301,20 @@ async function buildSignAndSubmit(
     // If the simulation fails, prepareTransaction throws automatically.
     const preparedTx = await rpcServer.prepareTransaction(tx);
 
-    // Sign the prepared transaction with Freighter
-    const signedXdr = await freighter.signTransaction(preparedTx.toXDR(), {
+    // Sign the prepared transaction with Freighter. The official API
+    // returns { signedTxXdr, signerAddress }, not a raw XDR string.
+    const signed = await freighterSignTransaction(preparedTx.toXDR(), {
       networkPassphrase: NETWORK_PASSPHRASE,
     });
+
+    if (signed.error || !signed.signedTxXdr) {
+      throw new Error(
+        (typeof signed.error === "string" && signed.error) ||
+          "No se pudo firmar la transacción en Freighter. Desbloqueá la extensión e intentá de nuevo."
+      );
+    }
+
+    const signedXdr = signed.signedTxXdr;
 
     // Deserialize the signed XDR back into a Transaction
     const signedTx = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE);

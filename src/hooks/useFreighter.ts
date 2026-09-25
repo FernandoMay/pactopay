@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { connectFreighter, isFreighterAvailable, getUsdcBalance } from "../lib/stellar";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { connectFreighter, isFreighterAvailable, isFreighterInstalled, getUsdcBalance } from "../lib/stellar";
 import type { WalletInfo } from "../types";
 
 interface UseFreighterReturn {
@@ -17,35 +17,82 @@ export function useFreighter(): UseFreighterReturn {
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isFreighterInstalled, setIsFreighterInstalled] = useState(false);
+  const [isFreighterInstalledState, setIsFreighterInstalled] = useState(
+    () => isFreighterAvailable()
+  );
+  const checkingRef = useRef(false);
+  const installedRef = useRef(isFreighterInstalledState);
+  const didAutoConnectRef = useRef(false);
 
-  // Check Freighter availability on mount and periodically
-  useEffect(() => {
-    const check = () => setIsFreighterInstalled(isFreighterAvailable());
-    check();
-    const interval = setInterval(check, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Auto-connect if previously connected
-  useEffect(() => {
-    const saved = localStorage.getItem("pactopay_wallet");
-    if (saved && isFreighterAvailable()) {
-      connectFreighter()
-        .then((info) => {
-          setWallet({ ...info, balance: 0 });
-          getUsdcBalance(info.address).then((balance) => {
-            setWallet((prev) => (prev ? { ...prev, balance } : null));
-          });
-        })
-        .catch(() => {
-          localStorage.removeItem("pactopay_wallet");
-        });
+  // Async availability check via the official Freighter API, with the sync
+  // bridge check as fallback so first paint stays sane. Never caches a
+  // negative result permanently: every poll and every connect click re-checks.
+  const checkInstalled = useCallback(async (): Promise<boolean> => {
+    if (checkingRef.current) {
+      return installedRef.current;
+    }
+    checkingRef.current = true;
+    try {
+      const installed = await isFreighterInstalled();
+      const result = installed || isFreighterAvailable();
+      installedRef.current = result;
+      setIsFreighterInstalled(result);
+      return result;
+    } catch {
+      const fallback = isFreighterAvailable();
+      installedRef.current = fallback;
+      setIsFreighterInstalled(fallback);
+      return fallback;
+    } finally {
+      checkingRef.current = false;
     }
   }, []);
 
+  // Check Freighter availability on mount and periodically
+  useEffect(() => {
+    void checkInstalled();
+    const interval = setInterval(() => {
+      void checkInstalled();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [checkInstalled]);
+
+  // Auto-connect if previously connected (runs once)
+  useEffect(() => {
+    const saved = localStorage.getItem("pactopay_wallet");
+    if (!saved || didAutoConnectRef.current) {
+      return;
+    }
+    didAutoConnectRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const installed = await checkInstalled();
+      if (!installed || cancelled) {
+        return;
+      }
+      try {
+        const info = await connectFreighter();
+        if (cancelled) {
+          return;
+        }
+        setWallet({ ...info, balance: 0 });
+        const balance = await getUsdcBalance(info.address);
+        if (!cancelled) {
+          setWallet((prev) => (prev ? { ...prev, balance } : null));
+        }
+      } catch {
+        localStorage.removeItem("pactopay_wallet");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkInstalled]);
+
   const connect = useCallback(async (): Promise<boolean> => {
-    if (!isFreighterAvailable()) {
+    // Re-check on every click — never trust a stale "not installed".
+    const installed = await checkInstalled();
+    if (!installed) {
       setError("Freighter no está instalado. Instalalo desde freighter.app");
       return false;
     }
@@ -66,7 +113,7 @@ export function useFreighter(): UseFreighterReturn {
     } finally {
       setIsConnecting(false);
     }
-  }, []);
+  }, [checkInstalled]);
 
   const disconnect = useCallback(() => {
     setWallet(null);
@@ -84,7 +131,7 @@ export function useFreighter(): UseFreighterReturn {
     wallet,
     isConnecting,
     isConnected: !!wallet,
-    isFreighterInstalled,
+    isFreighterInstalled: isFreighterInstalledState,
     error,
     connect,
     disconnect,

@@ -1,42 +1,84 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
+import {
+  isConnected as freighterIsConnected,
+  requestAccess,
+  getNetworkDetails,
+  signTransaction as freighterSignTransaction,
+} from "@stellar/freighter-api";
 
 const HORIZON_URL = "https://horizon-testnet.stellar.org";
 const NETWORK_PASSPHRASE = StellarSdk.Networks.TESTNET;
 
 /**
- * Check if Freighter is installed
+ * Sync best-effort check for first paint: true once the Freighter
+ * extension content script has injected its `freighterApi` bridge.
+ * Use `isFreighterInstalled()` for the authoritative async check.
  */
 export function isFreighterAvailable(): boolean {
-  return typeof window !== "undefined" && !!(window as any).freighter;
+  return typeof window !== "undefined" && !!(window as any).freighterApi;
 }
 
 /**
- * Get Freighter instance
+ * Authoritative availability check via the official Freighter API.
+ * Resolves true when the extension is installed and reachable.
  */
-function getFreighter() {
-  if (!isFreighterAvailable()) {
-    throw new Error("Freighter no está instalado. Instálalo desde freighter.app");
+export async function isFreighterInstalled(): Promise<boolean> {
+  try {
+    const res = await freighterIsConnected();
+    return res.isConnected === true;
+  } catch {
+    return false;
   }
-  return (window as any).freighter;
+}
+
+/** Extract a readable message from a Freighter API error. */
+function freighterErrorMessage(error: unknown): string {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && "message" in error) {
+    return String((error as { message: unknown }).message ?? "");
+  }
+  return "";
 }
 
 /**
- * Connect to Freighter and get the public key
+ * Connect to Freighter and get the public key.
+ * Prompts the user for account access on first use; resolves
+ * immediately when the app was already authorized.
  */
 export async function connectFreighter(): Promise<{
   address: string;
   network: "testnet" | "mainnet";
 }> {
-  const freighter = getFreighter();
+  const access = await requestAccess();
 
-  const [address, network] = await Promise.all([
-    freighter.getPublicKey(),
-    freighter.getNetwork(),
-  ]);
+  if (access.error || !access.address) {
+    throw new Error(
+      freighterErrorMessage(access.error) ||
+        "No se pudo obtener tu dirección de Freighter. Aprobá el acceso en la extensión e intentá de nuevo."
+    );
+  }
+
+  let network: "testnet" | "mainnet" = "testnet";
+  try {
+    const details = await getNetworkDetails();
+    if (!details.error) {
+      if (details.networkPassphrase) {
+        network =
+          details.networkPassphrase === StellarSdk.Networks.PUBLIC
+            ? "mainnet"
+            : "testnet";
+      } else if (details.network) {
+        network = details.network.toUpperCase() === "PUBLIC" ? "mainnet" : "testnet";
+      }
+    }
+  } catch {
+    // Keep the testnet default when network details are unavailable.
+  }
 
   return {
-    address,
-    network: network === "TESTNET" ? "testnet" : "mainnet",
+    address: access.address,
+    network,
   };
 }
 
@@ -114,14 +156,21 @@ export async function signAndSubmit(
   transaction: StellarSdk.Transaction
 ): Promise<{ success: boolean; hash?: string; error?: string }> {
   try {
-    const freighter = getFreighter();
-    const signedTx = await freighter.signTransaction(transaction.toXDR(), {
+    const signed = await freighterSignTransaction(transaction.toXDR(), {
       networkPassphrase: NETWORK_PASSPHRASE,
     });
 
+    if (signed.error || !signed.signedTxXdr) {
+      return {
+        success: false,
+        error:
+          freighterErrorMessage(signed.error) || "Error al firmar transacción",
+      };
+    }
+
     const server = new StellarSdk.Horizon.Server(HORIZON_URL);
     const result = await server
-      .submitTransaction(StellarSdk.TransactionBuilder.fromXDR(signedTx, NETWORK_PASSPHRASE));
+      .submitTransaction(StellarSdk.TransactionBuilder.fromXDR(signed.signedTxXdr, NETWORK_PASSPHRASE));
 
     return { success: true, hash: result.hash };
   } catch (error: any) {

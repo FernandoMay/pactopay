@@ -8,6 +8,7 @@ vi.mock('../../hooks/useFreighter', () => ({
     wallet: null,
     isConnecting: false,
     isConnected: false,
+    isFreighterInstalled: false,
     error: null,
     connect: vi.fn(),
     disconnect: vi.fn(),
