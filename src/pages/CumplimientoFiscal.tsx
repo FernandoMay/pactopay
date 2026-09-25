@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useWallet } from "../components/wallet/WalletProvider";
 
 const CERTIFICATES = [
   { id: "#CERT-2025-091", hash: "0x4f3e...8a19b3", beneficiary: "Fernando May", payer: "Apex Labs S.A.", entity: "🇲🇽 SAT (CFDI 4.0)", amount: "$1.500,00 USDC", status: "signed" },
@@ -118,6 +119,38 @@ const COUNTRIES = [
   },
 ];
 
+const CONTRACT_OPTIONS = [
+  "#PACTO-7729 — Fernando May ↔ Apex Labs S.A. — $1.500 USDC",
+  "#PACTO-7654 — Estudio Creativo Alpha ↔ Nordic Ventures Inc. — $3.400 USDC",
+  "#PACTO-7598 — Valeria Quispe Tech ↔ FinScale Corp. — $2.150 USDC",
+  "#PACTO-7531 — Andrés Mejía ↔ Bogotá Tech SAS — $4.200 USDC",
+  "#PACTO-7489 — Javiera Morales ↔ Santiago Devs — $2.850 USDC",
+];
+
+const CERT_OPTIONS = [
+  "Validar formato contra esquema oficial de la entidad",
+  "Adjuntar desglose de retenciones aplicables",
+  "Incluir sello criptográfico Ed25519 verificable",
+];
+
+/** Trigger a real client-side file download via Blob URL. */
+function downloadBlobFile(filename: string, content: string, mime: string): void {
+  const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+/** Escape a CSV cell (quotes, commas, newlines). */
+function csvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 const TAX_ENTITIES = [
   { id: "sat", label: "SAT", country: "🇲🇽" },
   { id: "arca", label: "ARCA", country: "🇦🇷" },
@@ -127,24 +160,60 @@ const TAX_ENTITIES = [
 ];
 
 export function CumplimientoFiscal() {
+  const { wallet, isConnected } = useWallet();
   const [activeTaxEntity, setActiveTaxEntity] = useState("sat");
-  const [generating, setGenerating] = useState(false);
+  const [fiscalYear, setFiscalYear] = useState("2025");
+  const [selectedContract, setSelectedContract] = useState(CONTRACT_OPTIONS[0]);
+  const [certChecks, setCertChecks] = useState<boolean[]>([true, true, true]);
   const [generated, setGenerated] = useState(false);
-  const [dossierDownloading, setDossierDownloading] = useState(false);
 
-  const handleGenerate = () => {
-    setGenerating(true);
-    setTimeout(() => {
-      setGenerating(false);
-      setGenerated(true);
-    }, 2000);
+  const toggleCheck = (index: number) => {
+    setCertChecks((prev) => prev.map((v, i) => (i === index ? !v : v)));
   };
 
-  const handleDossier = () => {
-    setDossierDownloading(true);
-    setTimeout(() => {
-      setDossierDownloading(false);
-    }, 1800);
+  const entityLabel = TAX_ENTITIES.find((te) => te.id === activeTaxEntity)?.label ?? activeTaxEntity;
+
+  // Real downloadable certificate: JSON file with the connected wallet,
+  // timestamp, testnet network and the selected options, explicitly
+  // labeled as testnet demo data with no fiscal validity.
+  const handleGenerate = () => {
+    const certificate = {
+      documento: "certificado-fiscal-demo",
+      red: "stellar-testnet",
+      billetera: isConnected && wallet ? wallet.address : "billetera no conectada",
+      entidad: entityLabel,
+      periodoFiscal: fiscalYear,
+      contratoVinculado: selectedContract,
+      emitidoEn: new Date().toISOString(),
+      opciones: CERT_OPTIONS.filter((_, i) => certChecks[i]),
+      advertencia: "Datos de demostración en testnet — sin validez fiscal ante ninguna entidad tributaria.",
+    };
+    downloadBlobFile(
+      `certificado-fiscal-${activeTaxEntity}-${fiscalYear}.json`,
+      JSON.stringify(certificate, null, 2),
+      "application/json"
+    );
+    setGenerated(true);
+  };
+
+  // Real downloadable export: CSV of the visible regulatory matrix.
+  const handleDownloadMatrix = () => {
+    const header = ["Pais", "Entidad", "Estado", "Regimen", "Detalle", "Comprobantes"].map(csvCell).join(",");
+    const rows = COUNTRIES.map((c) =>
+      [c.name, c.entity, c.status, c.regime, c.regimeDetail, `${c.count} ${c.countDetail}`].map(csvCell).join(",")
+    );
+    downloadBlobFile(`matriz-fiscal-${fiscalYear}.csv`, [header, ...rows].join("\n"), "text/csv");
+  };
+
+  const entityMailto = () => {
+    const subject = encodeURIComponent(`Certificado fiscal demo ${entityLabel} ${fiscalYear}`);
+    const body = encodeURIComponent(
+      `Entidad: ${entityLabel}\nPeriodo fiscal: ${fiscalYear}\n` +
+        `Contrato vinculado: ${selectedContract}\n` +
+        `Billetera: ${isConnected && wallet ? wallet.address : "no conectada"}\n` +
+        `Red: Stellar Testnet (datos de demostración, sin validez fiscal).\n`
+    );
+    return `mailto:?subject=${subject}&body=${body}`;
   };
 
   return (
@@ -182,31 +251,25 @@ export function CumplimientoFiscal() {
                 <div className="flex items-center gap-space-xs px-3 py-2 rounded-lg bg-surface-container-lowest shadow-sm">
                   <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
                   <span className="font-label-lg text-label-lg text-on-surface font-semibold">Periodo Fiscal:</span>
-                  <select className="bg-transparent text-on-surface font-label-lg text-label-lg font-bold focus:outline-none cursor-pointer">
-                    <option>2025</option>
-                    <option>2024</option>
-                    <option>2023</option>
+                  <select
+                    value={fiscalYear}
+                    onChange={(e) => setFiscalYear(e.target.value)}
+                    className="bg-transparent text-on-surface font-label-lg text-label-lg font-bold focus:outline-none cursor-pointer"
+                  >
+                    <option value="2025">2025</option>
+                    <option value="2024">2024</option>
+                    <option value="2023">2023</option>
                   </select>
                 </div>
 
-                {/* Dossier button */}
+                {/* Matrix download button */}
                 <button
                   type="button"
-                  onClick={handleDossier}
-                  disabled={dossierDownloading}
+                  onClick={handleDownloadMatrix}
                   className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md font-bold shadow-md transition-all active:scale-[0.98]"
                 >
-                  {dossierDownloading ? (
-                    <>
-                      <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-                      Empaquetando Dossier...
-                    </>
-                  ) : (
-                    <>
-                      <span className="material-symbols-outlined text-[18px]">folder_zip</span>
-                      Descargar Dossier Fiscal Consolidado (ZIP)
-                    </>
-                  )}
+                  <span className="material-symbols-outlined text-[18px]">download</span>
+                  Descargar matriz fiscal (CSV)
                 </button>
               </div>
             </div>
@@ -320,8 +383,10 @@ export function CumplimientoFiscal() {
                       type="button"
                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold transition-colors shadow-sm"
                     >
-                      <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-                      {c.action}
+                      <a href="#registro-auditoria" className="inline-flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                        {c.action}
+                      </a>
                     </button>
                   </div>
                 </div>
@@ -351,12 +416,14 @@ export function CumplimientoFiscal() {
                   <label className="font-label-lg text-label-lg text-on-surface font-medium">Contrato de Custodia Vinculado</label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px] pointer-events-none">description</span>
-                    <select className="w-full h-11 pl-10 pr-4 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer shadow-inner">
-                      <option>#PACTO-7729 — Fernando May ↔ Apex Labs S.A. — $1.500 USDC</option>
-                      <option>#PACTO-7654 — Estudio Creativo Alpha ↔ Nordic Ventures Inc. — $3.400 USDC</option>
-                      <option>#PACTO-7598 — Valeria Quispe Tech ↔ FinScale Corp. — $2.150 USDC</option>
-                      <option>#PACTO-7531 — Andrés Mejía ↔ Bogotá Tech SAS — $4.200 USDC</option>
-                      <option>#PACTO-7489 — Javiera Morales ↔ Santiago Devs — $2.850 USDC</option>
+                    <select
+                      value={selectedContract}
+                      onChange={(e) => setSelectedContract(e.target.value)}
+                      className="w-full h-11 pl-10 pr-4 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none cursor-pointer shadow-inner"
+                    >
+                      {CONTRACT_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
                     </select>
                     <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline text-[18px] pointer-events-none">expand_more</span>
                   </div>
@@ -404,15 +471,12 @@ export function CumplimientoFiscal() {
 
                 {/* Checkboxes */}
                 <div className="flex flex-col gap-2">
-                  {[
-                    "Validar formato contra esquema oficial de la entidad",
-                    "Adjuntar desglose de retenciones aplicables",
-                    "Incluir sello criptográfico Ed25519 verificable",
-                  ].map((item) => (
+                  {CERT_OPTIONS.map((item, i) => (
                     <label key={item} className="flex items-center gap-2.5 cursor-pointer group">
                       <input
                         type="checkbox"
-                        defaultChecked
+                        checked={certChecks[i] ?? false}
+                        onChange={() => toggleCheck(i)}
                         className="w-4 h-4 rounded border-outline-variant text-primary accent-primary focus:ring-primary/20"
                       />
                       <span className="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">{item}</span>
@@ -424,22 +488,16 @@ export function CumplimientoFiscal() {
                 <button
                   type="button"
                   onClick={handleGenerate}
-                  disabled={generating}
                   className={`w-full py-3.5 px-space-md rounded-xl font-title-md text-title-md font-bold shadow-md transition-all flex items-center justify-center gap-2 group active:scale-[0.99] ${
                     generated
                       ? "bg-secondary-container text-on-secondary-container cursor-default"
                       : "bg-primary hover:bg-primary-container text-on-primary hover:shadow-lg"
                   }`}
                 >
-                  {generating ? (
-                    <>
-                      <span className="material-symbols-outlined text-[22px] animate-spin">progress_activity</span>
-                      Generando Certificado Fiscal...
-                    </>
-                  ) : generated ? (
+                  {generated ? (
                     <>
                       <span className="material-symbols-outlined text-[22px]">check_circle</span>
-                      Certificado Generado y Firmado
+                      Certificado Descargado (JSON demo)
                     </>
                   ) : (
                     <>
@@ -544,18 +602,19 @@ export function CumplimientoFiscal() {
                 <div className="grid grid-cols-2 gap-space-xs">
                   <button
                     type="button"
+                    onClick={() => window.print()}
                     className="h-10 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                   >
                     <span className="material-symbols-outlined text-[18px]">download</span>
                     Descargar PDF
                   </button>
-                  <button
-                    type="button"
+                  <a
+                    href={entityMailto()}
                     className="h-10 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                   >
                     <span className="material-symbols-outlined text-[18px]">send</span>
                     Enviar a la Entidad
-                  </button>
+                  </a>
                 </div>
               </div>
             </div>
@@ -610,7 +669,7 @@ export function CumplimientoFiscal() {
           {/* ───────────────────────────────────────────────
               SECTION E — Audit Trail Table
           ─────────────────────────────────────────────── */}
-          <section className="rounded-xl bg-surface-container-lowest p-space-lg shadow-sm">
+          <section id="registro-auditoria" className="rounded-xl bg-surface-container-lowest p-space-lg shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm mb-space-lg">
               <div className="flex items-center gap-space-sm">
                 <span className="material-symbols-outlined text-primary text-[22px]">history</span>
@@ -669,6 +728,7 @@ export function CumplimientoFiscal() {
                       <td className="py-3.5 text-right">
                         <button
                           type="button"
+                          onClick={() => window.print()}
                           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold transition-colors shadow-sm"
                         >
                           <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>

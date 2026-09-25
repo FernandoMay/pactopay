@@ -3,36 +3,154 @@ import {
   formatLatamCurrency,
   calculateFees,
   getLocalEstimates,
-  generateInvoiceId,
-  generatePaymentLink,
+  truncateAddress,
 } from "../lib/format";
+import {
+  escrowClient,
+  sanitizeMilestoneDescription,
+  isValidStellarAddress,
+  explorerTxUrl,
+  EXPLORER_CONTRACT_URL,
+  ESCROW_CONTRACT_ADDRESS,
+} from "../lib/contract";
+import { useWallet } from "../components/wallet/WalletProvider";
+import { TxFeedback, useTxFeedback } from "../components/ui/TxFeedback";
+
+interface TxRecord {
+  label: string;
+  hash: string;
+}
 
 export function CrearFactura() {
+  const { wallet, isConnected, isConnecting, connect } = useWallet();
+  const { txState, startSigning, startSubmitting, succeed, fail, reset } = useTxFeedback();
+
   const [clientEmail, setClientEmail] = useState("finanzas@acmecorp.us");
+  const [contractorAddress, setContractorAddress] = useState("");
   const [amount, setAmount] = useState(1500);
   const [concept, setConcept] = useState(
     "Integración de Interfaz UI/UX en Diseño Responsive y Conexión con Stellar SDK"
   );
   const [term, setTerm] = useState("14 días para revisar");
   const [invoiceId, setInvoiceId] = useState("INV-2026-0042");
-  const [paymentLink, setPaymentLink] = useState("https://pactopay.lat/pagar/inv_98f4a21");
+  const [paymentLink, setPaymentLink] = useState("");
+  const [createdEscrowId, setCreatedEscrowId] = useState<string | null>(null);
+  const [txRecords, setTxRecords] = useState<TxRecord[]>([]);
   const [copyFeedback, setCopyFeedback] = useState(false);
-  const [generatedFeedback, setGeneratedFeedback] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fees = calculateFees(amount);
   const localEstimates = getLocalEstimates(amount);
+  const contractorValid = contractorAddress.trim() === "" ? null : isValidStellarAddress(contractorAddress);
 
-  const handleGenerateLink = () => {
-    setInvoiceId(`INV-2026-${Math.floor(1000 + Math.random() * 9000)}`);
-    setPaymentLink(generatePaymentLink());
-    setGeneratedFeedback(true);
-    setTimeout(() => setGeneratedFeedback(false), 3000);
+  const mailtoHref = () => {
+    const recipient = clientEmail.includes("@") ? clientEmail : "";
+    const subject = encodeURIComponent(`Factura ${invoiceId} — Pago en custodia PactoPay`);
+    const body = encodeURIComponent(
+      `Hola,\n\nTe comparto la factura ${invoiceId} por ${formatLatamCurrency(amount)}.\n` +
+        `Concepto: ${concept}\nPlazo de revisión: ${term}\n` +
+        (paymentLink
+          ? `Enlace de pago en custodia (Stellar Testnet): ${paymentLink}\n`
+          : `El enlace de pago en custodia se genera al crear la custodia en Stellar Testnet.\n`) +
+        `\nSaludos.`
+    );
+    return `mailto:${recipient}?subject=${subject}&body=${body}`;
+  };
+
+  const handleCreateEscrow = async () => {
+    setFormError(null);
+    setCopyFeedback(false);
+
+    if (!isConnected || !wallet) {
+      await connect();
+      setFormError("Conectá tu billetera Freighter y volvé a confirmar para firmar la custodia en testnet.");
+      return;
+    }
+
+    if (!isValidStellarAddress(contractorAddress)) {
+      setFormError("Ingresá la dirección Stellar (G…) del contratista. El contrato la exige como dirección válida.");
+      return;
+    }
+    const total = Math.floor(amount);
+    if (!Number.isFinite(total) || total <= 0) {
+      setFormError("El monto debe ser mayor a cero.");
+      return;
+    }
+    if (concept.trim().length === 0) {
+      setFormError("Describí el concepto del servicio para registrar el hito en el contrato.");
+      return;
+    }
+
+    const payerAddress = wallet.address;
+    setIsSubmitting(true);
+    startSigning();
+
+    try {
+      // Snapshot of existing escrows so the newly created one can be
+      // identified with a real on-chain read afterwards.
+      let beforeIds = new Set<string>();
+      try {
+        const before = await escrowClient.getEscrowsForAddress(payerAddress);
+        beforeIds = new Set(before.map((e) => e.id));
+      } catch {
+        beforeIds = new Set<string>();
+      }
+
+      const created = await escrowClient.createEscrow(
+        payerAddress,
+        contractorAddress.trim(),
+        total
+      );
+      if (!created.success) {
+        throw new Error(created.error || "No se pudo crear la custodia en testnet.");
+      }
+      const records: TxRecord[] = [];
+      if (created.hash) {
+        records.push({ label: "Creación de custodia", hash: created.hash });
+      }
+
+      startSubmitting();
+
+      // Resolve the real on-chain escrow ID with a fresh read.
+      const after = await escrowClient.getEscrowsForAddress(payerAddress);
+      const fresh = after.find((e) => !beforeIds.has(e.id)) ?? after[after.length - 1];
+      if (!fresh) {
+        throw new Error(
+          "La custodia se firmó pero no se pudo leer su ID en testnet. Verificá el hash de creación en el explorer."
+        );
+      }
+
+      const milestoneDesc = sanitizeMilestoneDescription(concept);
+      const milestone = await escrowClient.addMilestone(fresh.id, milestoneDesc, total, payerAddress);
+      if (!milestone.success) {
+        throw new Error(milestone.error || "Custodia creada, pero falló el alta del hito en testnet.");
+      }
+      if (milestone.hash) {
+        records.push({ label: "Alta de hito", hash: milestone.hash });
+      }
+
+      setTxRecords(records);
+      setCreatedEscrowId(fresh.id);
+      setInvoiceId(`INV-${fresh.id}`);
+      setPaymentLink(`https://pactopay.lat/pagar/${fresh.id}`);
+      succeed(milestone.hash ?? created.hash ?? "");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error al crear la custodia en testnet.";
+      setFormError(message);
+      fail(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCopyLink = () => {
+    if (!paymentLink) {
+      setFormError("Todavía no hay enlace: creá la custodia en testnet para obtener el enlace de pago real.");
+      return;
+    }
     navigator.clipboard.writeText(paymentLink).then(() => {
       setCopyFeedback(true);
-      setTimeout(() => setCopyFeedback(false), 2500);
     });
   };
 
@@ -51,10 +169,10 @@ export function CrearFactura() {
             <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-secondary text-on-secondary">
               <span className="material-symbols-outlined text-[14px]">bolt</span>
             </span>
-            <span className="font-label-lg text-label-lg text-primary">Novedad LATAM:</span>
+            <span className="font-label-lg text-label-lg text-primary">Red de prueba:</span>
             <span className="text-on-surface-variant">
-              Retiros directos a bancos locales en Argentina, Colombia, México y Brasil habilitados
-              con tasa interbancaria oficial.
+              Custodia real en Stellar Testnet con USDC de prueba. Cada operación deja un hash
+              verificable en el explorer.
             </span>
           </div>
           <div className="flex items-center gap-space-xs">
@@ -122,7 +240,7 @@ export function CrearFactura() {
               </span>
             </div>
 
-            <form className="flex flex-col gap-space-md" onSubmit={(e) => { e.preventDefault(); handleGenerateLink(); }}>
+            <form className="flex flex-col gap-space-md" onSubmit={(e) => { e.preventDefault(); void handleCreateEscrow(); }}>
               {/* Client */}
               <div className="flex flex-col gap-1.5">
                 <label className="font-label-lg text-label-lg text-on-surface flex items-center justify-between font-medium">
@@ -142,6 +260,39 @@ export function CrearFactura() {
                     <span className="material-symbols-outlined absolute right-3 text-secondary text-[20px]">check_circle</span>
                   )}
                 </div>
+              </div>
+
+              {/* Contractor Stellar address (real on-chain requirement) */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-label-lg text-label-lg text-on-surface flex items-center justify-between font-medium">
+                  <span>Dirección Stellar del Contratista (G…)</span>
+                  <span className="text-body-sm font-body-sm text-on-surface-variant">Requerida por el contrato</span>
+                </label>
+                <div className="relative flex items-center">
+                  <span className="material-symbols-outlined absolute left-3 text-outline text-[20px] pointer-events-none">account_balance_wallet</span>
+                  <input
+                    className="w-full h-11 pl-10 pr-10 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md font-mono focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all shadow-inner"
+                    placeholder="G…"
+                    type="text"
+                    spellCheck={false}
+                    value={contractorAddress}
+                    onChange={(e) => setContractorAddress(e.target.value)}
+                  />
+                  {contractorValid === true && (
+                    <span className="material-symbols-outlined absolute right-3 text-secondary text-[20px]">check_circle</span>
+                  )}
+                  {contractorValid === false && (
+                    <span className="material-symbols-outlined absolute right-3 text-error text-[20px]">error</span>
+                  )}
+                </div>
+                {contractorValid === false && (
+                  <p className="font-body-sm text-body-sm text-error">
+                    Dirección Stellar inválida: debe ser una clave pública válida (G…) o un contrato (C…).
+                  </p>
+                )}
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  El correo se usa solo para el comprobante; la custodia on-chain exige la dirección Stellar del contratista.
+                </p>
               </div>
 
               {/* Amount */}
@@ -191,6 +342,9 @@ export function CrearFactura() {
                   value={concept}
                   onChange={(e) => setConcept(e.target.value)}
                 />
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  Se registra en el contrato como símbolo de hasta 32 caracteres (mayúsculas, sin espacios).
+                </p>
               </div>
 
               {/* Term Selector */}
@@ -238,14 +392,14 @@ export function CrearFactura() {
                 </div>
                 <div className="flex items-center justify-between text-body-md font-body-md">
                   <span className="text-on-surface-variant flex items-center gap-1">
-                    Comisión de servicio PactoPay (0,5%):
+                    Comisión de servicio estimada (0,5%, no retenida on-chain):
                     <span className="material-symbols-outlined text-[15px] text-outline" title="La comisión más baja del mercado">help</span>
                   </span>
                   <span className="font-medium text-error">-{formatLatamCurrency(fees.fee)}</span>
                 </div>
                 <div className="flex items-center justify-between text-body-sm font-body-sm">
                   <span className="text-on-surface-variant">Tarifa de red blockchain (Stellar):</span>
-                  <span className="font-medium text-secondary">¡100% Cubierta por PactoPay!</span>
+                    <span className="font-medium text-secondary">Tarifa base Stellar: 0,00001 XLM</span>
                 </div>
                 <div className="h-px w-full bg-outline-variant/30 my-0.5"></div>
                 <div className="flex items-center justify-between">
@@ -268,17 +422,55 @@ export function CrearFactura() {
                 </div>
               </div>
 
+              {/* Wallet status + errors */}
+              <div className="p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between gap-space-sm">
+                <div className="flex items-center gap-2 text-on-surface font-body-sm text-body-sm">
+                  <span className="material-symbols-outlined text-primary text-[20px]">account_balance_wallet</span>
+                  <span>
+                    {isConnected && wallet
+                      ? `Firmás como ${truncateAddress(wallet.address)} (Testnet)`
+                      : "Necesitás Freighter para firmar la custodia en testnet"}
+                  </span>
+                </div>
+                {!isConnected && (
+                  <button
+                    type="button"
+                    onClick={() => void connect()}
+                    disabled={isConnecting}
+                    className="px-3 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold transition-colors shrink-0"
+                  >
+                    {isConnecting ? "Conectando..." : "Conectar Freighter"}
+                  </button>
+                )}
+              </div>
+              {formError && (
+                <div className="p-space-sm rounded-lg bg-error-container text-on-error-container font-body-sm text-body-sm flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">error</span>
+                  <span>{formError}</span>
+                </div>
+              )}
+
               {/* CTA */}
               <button
                 type="submit"
-                className="w-full h-12 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 group"
+                disabled={isSubmitting}
+                className="w-full h-12 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 group disabled:opacity-70"
               >
-                <span>Generar Enlace de Cobro Seguro</span>
-                <span className="material-symbols-outlined text-[20px] transition-transform group-hover:translate-x-1">arrow_forward</span>
+                {isSubmitting ? (
+                  <>
+                    <span className="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
+                    <span>Firmando custodia en Freighter...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Crear custodia real en Testnet</span>
+                    <span className="material-symbols-outlined text-[20px] transition-transform group-hover:translate-x-1">arrow_forward</span>
+                  </>
+                )}
               </button>
               <p className="font-body-sm text-body-sm text-center text-on-surface-variant flex items-center justify-center gap-1">
                 <span className="material-symbols-outlined text-[16px] text-secondary">shield</span>
-                No se requiere suscripción previa ni costo de apertura para tu cliente.
+                Crea el escrow on-chain (createEscrow + addMilestone) firmado por tu billetera.
               </p>
             </form>
           </div>
@@ -297,7 +489,7 @@ export function CrearFactura() {
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-bold flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px]">shield_with_heart</span>
-                  Lista para enviar
+                  {createdEscrowId ? "Custodia en testnet" : "Lista para enviar"}
                 </span>
               </div>
 
@@ -316,6 +508,12 @@ export function CrearFactura() {
                   <span className="text-on-surface-variant">Período de revisión:</span>
                   <span className="font-medium text-on-surface">{term.split("(")[0].trim()}</span>
                 </div>
+                {createdEscrowId && (
+                  <div className="flex items-center justify-between text-body-sm font-body-sm">
+                    <span className="text-on-surface-variant">Escrow on-chain:</span>
+                    <span className="font-mono font-semibold text-primary">{createdEscrowId}</span>
+                  </div>
+                )}
               </div>
 
               <div className="p-space-md rounded-xl bg-surface-container text-center flex flex-col items-center justify-center gap-1">
@@ -334,18 +532,20 @@ export function CrearFactura() {
               <div className="flex flex-col gap-1.5">
                 <label className="font-label-md text-label-md text-on-surface-variant font-semibold flex items-center justify-between">
                   <span>Enlace de Cobro Seguro para tu cliente:</span>
-                  <span className={`text-secondary font-bold font-label-sm text-label-sm ${copyFeedback || generatedFeedback ? "" : "hidden"}`}>
-                    {generatedFeedback ? "¡Nuevo enlace generado!" : "¡Copiado al portapapeles!"}
+                  <span className={`text-secondary font-bold font-label-sm text-label-sm ${copyFeedback || createdEscrowId ? "" : "hidden"}`}>
+                    {createdEscrowId ? "¡Custodia creada en testnet!" : ""}
+                    {copyFeedback ? " ¡Copiado al portapapeles!" : ""}
                   </span>
                 </label>
                 <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-surface-container-low shadow-inner">
                   <div className="flex-1 px-2.5 py-1.5 truncate text-body-sm font-body-sm font-mono text-primary font-medium select-all">
-                    {paymentLink}
+                    {paymentLink || "El enlace real aparece aquí al crear la custodia en testnet"}
                   </div>
                   <button
                     type="button"
                     onClick={handleCopyLink}
-                    className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md font-semibold transition-colors flex items-center gap-1 shadow-sm shrink-0"
+                    disabled={!paymentLink}
+                    className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md font-semibold transition-colors flex items-center gap-1 shadow-sm shrink-0 disabled:opacity-50"
                   >
                     <span className="material-symbols-outlined text-[16px]">content_copy</span>
                     <span>Copiar</span>
@@ -353,60 +553,67 @@ export function CrearFactura() {
                 </div>
               </div>
 
-              {/* QR Section */}
+              {/* Real on-chain transactions */}
+              {txRecords.length > 0 && (
+                <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-2">
+                  <span className="font-label-md text-label-md font-bold text-on-surface">
+                    Transacciones reales en Testnet
+                  </span>
+                  {txRecords.map((t) => (
+                    <div key={t.hash} className="flex items-center justify-between gap-2 text-body-sm font-body-sm">
+                      <span className="text-on-surface-variant">{t.label}</span>
+                      <a
+                        href={explorerTxUrl(t.hash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-primary font-semibold hover:underline truncate max-w-[180px]"
+                      >
+                        {t.hash.slice(0, 12)}…
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Testnet contract reference (real, replaces decorative QR) */}
               <div className="p-space-md rounded-xl bg-surface-container-low flex items-center gap-space-md">
-                <div className="w-24 h-24 bg-surface-container-lowest rounded-lg p-2 shadow-sm shrink-0 flex items-center justify-center">
-                  <svg className="w-full h-full text-on-surface" fill="currentColor" viewBox="0 0 100 100">
-                    <rect height="30" rx="3" width="30" x="0" y="0"></rect>
-                    <rect fill="#ffffff" height="20" rx="2" width="20" x="5" y="5"></rect>
-                    <rect height="12" rx="1" width="12" x="9" y="9"></rect>
-                    <rect height="30" rx="3" width="30" x="70" y="0"></rect>
-                    <rect fill="#ffffff" height="20" rx="2" width="20" x="75" y="5"></rect>
-                    <rect height="12" rx="1" width="12" x="79" y="9"></rect>
-                    <rect height="30" rx="3" width="30" x="0" y="70"></rect>
-                    <rect fill="#ffffff" height="20" rx="2" width="20" x="5" y="75"></rect>
-                    <rect height="12" rx="1" width="12" x="9" y="79"></rect>
-                    <rect height="8" width="8" x="36" y="8"></rect>
-                    <rect height="6" width="6" x="48" y="8"></rect>
-                    <rect height="6" width="6" x="58" y="14"></rect>
-                    <rect height="6" width="14" x="36" y="24"></rect>
-                    <rect height="12" width="6" x="10" y="38"></rect>
-                    <rect height="6" width="8" x="22" y="44"></rect>
-                    <rect fill="#00236f" height="12" rx="1" width="12" x="38" y="38"></rect>
-                    <rect height="8" width="10" x="56" y="38"></rect>
-                    <rect height="6" width="8" x="72" y="38"></rect>
-                    <rect height="10" width="8" x="86" y="44"></rect>
-                    <rect height="8" width="8" x="38" y="58"></rect>
-                    <rect height="6" width="16" x="50" y="54"></rect>
-                    <rect height="8" width="14" x="72" y="58"></rect>
-                    <rect height="8" width="10" x="40" y="72"></rect>
-                    <rect height="14" width="8" x="56" y="72"></rect>
-                    <rect height="8" width="12" x="72" y="76"></rect>
-                    <rect height="12" width="6" x="88" y="72"></rect>
-                  </svg>
+                <div className="w-12 h-12 bg-surface-container-lowest rounded-lg shadow-sm shrink-0 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-primary text-[28px]">verified_user</span>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <span className="font-label-md text-label-md font-bold text-on-surface">Escaneo con Billetera Móvil</span>
+                  <span className="font-label-md text-label-md font-bold text-on-surface">Contrato de custodia en Testnet</span>
                   <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Compatible con LOBSTR, Freighter, Vibrant o cualquier billetera Stellar.
+                    Custodia programable verificable en el explorer. Firmás cada paso con Freighter.
                   </p>
-                  <span className="font-label-sm text-label-sm text-primary font-semibold flex items-center gap-1 mt-0.5">
-                    <span className="material-symbols-outlined text-[14px]">speed</span>
-                    Confirmación en 3,8 segundos
-                  </span>
+                  <a
+                    href={EXPLORER_CONTRACT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-label-sm text-label-sm text-primary font-semibold inline-flex items-center gap-1 hover:underline"
+                  >
+                    <span className="font-mono">{truncateAddress(ESCROW_CONTRACT_ADDRESS, 6)}</span>
+                    <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                  </a>
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-space-xs pt-1">
-                <button type="button" className="h-10 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="h-10 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                >
                   <span className="material-symbols-outlined text-[18px]">download</span>
                   <span>Descargar PDF</span>
                 </button>
-                <button type="button" className="h-10 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                <a
+                  href={mailtoHref()}
+                  className="h-10 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                >
                   <span className="material-symbols-outlined text-[18px]">send</span>
                   <span>Enviar por Correo</span>
-                </button>
+                </a>
               </div>
 
               {/* Assurance */}
@@ -440,14 +647,14 @@ export function CrearFactura() {
               name: "Matías Rossi",
               role: "Desarrollador Full-Stack • Buenos Aires",
               quote: "Antes cobraba vía transferencias SWIFT que tardaban 8 días y me sacaban 80 USD entre bancos corresponsales. Con PactoPay, el cliente deposita en USDC y cuando entrego la pull request, el cobro cae en segundos.",
-              amount: "$ 18.400 USDC cobrados en 2024",
+              amount: "Testimonio ilustrativo",
               img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAwG7PErM9guOlAX08fDNinNFdmsMdPiFF2ECsKn69G9uENqzjPL22X4DW1NsH5Fnk8L5pFVmGU2WXNZwca3IzVG1vG4okIUIF61Bq4kHaRp3c-Hml8f7-Aa9t5CAn4ZUVACd1c4YN1CE2bHKThBLGDT2zM1Xyw9ylKW-ILLMT7VycrtpLe8XHoGGkwBNmxzenxh0__5JE6Ucj0ikKVtX857PMrskly_J-M1yqcMWM",
             },
             {
               name: "Camila Valenzuela",
               role: "Diseñadora UI/UX • Medellín",
               quote: "Mis clientes de EE.UU. preferían no enviar adelantos por temor a retrasos, y yo no podía arrancar sin anticipo. La custodia de PactoPay resolvió la desconfianza por completo.",
-              amount: "$ 12.950 USDC cobrados con éxito",
+              amount: "Testimonio ilustrativo",
               img: "https://lh3.googleusercontent.com/aida-public/AB6AXuA8P6KSlEJnyVJnESuaMv_ARAv2_mqHRqU_vR6g_7BCUNCLsdgYPevaG7gTpOlN9vkLNbrB7Mw4Rph0NTCReCwNFK_FDSVTfXQiowOMjY21Wif0A-8gO8yEAkU5K3uc6l6tYLrOXCZyg6AhW3OebszRpTBZAAZwKtVi-9SI3KOt9C_ERkcPUIa4JEKNYPo0uPkvkxC1S8_ANYobU4Kk2JxV34ePDTbuDWnRakAiWu8",
             },
           ].map((t) => (
@@ -470,22 +677,22 @@ export function CrearFactura() {
           <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant font-semibold">Métricas de Red</span>
-                <span className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-bold">En Vivo</span>
+                <span className="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant font-semibold">Estado de Red</span>
+                <span className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-bold">Testnet</span>
               </div>
-              <div className="font-amount-display text-amount-display text-primary font-bold tracking-tight mb-1">$ 4,2M+</div>
+              <div className="font-amount-display text-amount-display text-primary font-bold tracking-tight mb-1">Stellar Testnet</div>
               <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-sm">
-                Volumen total liquidado sin ninguna disputa impaga para creadores latinoamericanos.
+                Contrato de custodia desplegado en la red de prueba. Verificá cada transacción en el explorer.
               </p>
             </div>
             <div className="p-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1 text-body-sm font-body-sm">
               <div className="flex items-center justify-between">
-                <span className="text-on-surface-variant">Tiempo promedio de liberación:</span>
-                <span className="font-bold text-secondary">3,4 segundos</span>
+                <span className="text-on-surface-variant">Cierre de ledger en Stellar:</span>
+                <span className="font-bold text-secondary">~5 segundos</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-on-surface-variant">Costo promedio de gas:</span>
-                <span className="font-bold text-on-surface">&lt; $0,001 USD</span>
+                <span className="text-on-surface-variant">Tarifa base por transacción:</span>
+                <span className="font-bold text-on-surface">0,00001 XLM</span>
               </div>
             </div>
           </div>
@@ -508,7 +715,7 @@ export function CrearFactura() {
             {[
               { num: "1", color: "bg-primary text-on-primary", title: "Envías la factura", desc: "Tu cliente recibe el enlace seguro y ve el desglose exacto de los fondos, tiempos y entregables sin sorpresas ni letra chica.", icon: "link", iconColor: "text-primary", footer: "Enlace compatible con cualquier navegador" },
               { num: "2", color: "bg-secondary text-on-secondary", title: "Cliente asegura el dinero", desc: "Los fondos quedan protegidos en custodia respaldada por Stellar. Nadie puede tocarlos ni cancelarlos unilateralmente.", icon: "lock_clock", iconColor: "text-secondary", footer: "Notificación instantánea de depósito en garantía" },
-              { num: "3", color: "bg-primary-container text-on-primary", title: "Entregas y recibes", desc: "Tras revisar tu trabajo acordado, los fondos se liberan directo a tu cuenta o billetera en dólares líquidos en cuestión de segundos.", icon: "currency_exchange", iconColor: "text-primary", footer: "Opción de retiro en moneda local a tu CBU/CVU/PIX" },
+              { num: "3", color: "bg-primary-container text-on-primary", title: "Entregas y recibes", desc: "Tras revisar tu trabajo acordado, los fondos se liberan en USDC a tu billetera Stellar con una transacción verificable.", icon: "currency_exchange", iconColor: "text-primary", footer: "Liberación a tu billetera Stellar en USDC" },
             ].map((step) => (
               <div key={step.num} className="flex flex-col items-start gap-space-sm p-space-md rounded-xl bg-surface-container-low relative">
                 <div className={`w-12 h-12 rounded-xl ${step.color} flex items-center justify-center font-title-lg text-title-lg font-bold shadow-sm`}>
@@ -547,10 +754,10 @@ export function CrearFactura() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
               {[
-                { q: "¿Mi cliente necesita tener criptomonedas o Stellar?", a: "No necesariamente. Tu cliente puede fondear la custodia con tarjeta de crédito/débito internacional, transferencia ACH en dólares, o si lo prefiere, directamente en USDC desde cualquier billetera." },
-                { q: "¿Qué pasa si el cliente no responde tras la entrega?", a: "Cada factura cuenta con un plazo predeterminado de revisión (7, 14 o 30 días). Si el cliente no solicita cambios ni abre una mediación formal dentro del plazo, el contrato inteligente liquida el 100% de los fondos a tu favor." },
-                { q: "¿Cómo convierto los USDC a mi moneda local?", a: "Desde tu Panel de Control puedes pulsar 'Retirar Fondos' para enviar los USDC directo a Mercado Pago, cuentas bancarias de Argentina (CBU/CVU), México (SPEI), Colombia (PSE/Bancolombia) o Brasil (PIX)." },
-                { q: "¿Por qué la comisión es solo del 0,5%?", a: "A diferencia de las redes tradicionales que cobran hasta un 5-7%, Stellar cobra fracciones de centavo por transacción. Pasamos esa eficiencia a los creadores independientes de Latinoamérica." },
+                { q: "¿Mi cliente necesita tener criptomonedas o Stellar?", a: "Sí, en esta versión. Tu cliente fondea la custodia en USDC desde su billetera Stellar (por ejemplo Freighter) en la red de prueba. Todavía no hay fondeo con tarjeta ni transferencia bancaria." },
+                { q: "¿Qué pasa si el cliente no responde tras la entrega?", a: "Hoy no hay autoliquidación por plazo en el contrato: la liberación la aprueba el pagador desde el Panel de Control. Si hay desacuerdo, cualquiera de las partes puede abrir una disputa on-chain y el remanente vuelve al pagador con un refund verificable." },
+                { q: "¿Cómo convierto los USDC a mi moneda local?", a: "En esta versión los fondos se liberan en USDC a tu billetera Stellar. El retiro a moneda local (Mercado Pago, SPEI, PIX, etc.) todavía no está integrado." },
+                { q: "¿Por qué la comisión es solo del 0,5%?", a: "Ese 0,5% es el modelo previsto para producción y se muestra como estimación. On-chain en testnet no se retiene nada: solo pagás la tarifa base de Stellar (0,00001 XLM por transacción)." },
               ].map((faq) => (
                 <div key={faq.q} className="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-1.5">
                   <h4 className="font-title-md text-title-md font-semibold text-on-surface flex items-center gap-2">
@@ -564,6 +771,14 @@ export function CrearFactura() {
           </div>
         </section>
       </div>
+
+      {/* Transaction Feedback Toast (real hashes) */}
+      <TxFeedback
+        status={txState.status}
+        txHash={txState.txHash}
+        error={txState.error}
+        onDismiss={reset}
+      />
     </div>
   );
 }

@@ -27,6 +27,52 @@ import { signTransaction as freighterSignTransaction } from "@stellar/freighter-
 const CONTRACT_ADDRESS =
   "CDYOE2URCONPH6XUVAJHMVAMGMKGVS3JZ7TOTXIMWWBKS573CG6XPWEV";
 
+/** Public alias of the deployed escrow contract address for UI links */
+export const ESCROW_CONTRACT_ADDRESS = CONTRACT_ADDRESS;
+
+/** Stellar Expert testnet URL for the deployed escrow contract */
+export const EXPLORER_CONTRACT_URL = `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ADDRESS}`;
+
+/** Base URL for Stellar Expert testnet transactions */
+export const EXPLORER_TX_BASE = "https://stellar.expert/explorer/testnet/tx";
+
+/**
+ * Build a Stellar Expert testnet URL for a transaction hash.
+ */
+export function explorerTxUrl(hash: string): string {
+  return `${EXPLORER_TX_BASE}/${hash}`;
+}
+
+/**
+ * Sanitize free text into a valid Soroban Symbol for milestone descriptions:
+ * uppercase alphanumeric + underscore, max 32 chars. Falls back to a
+ * non-empty default so the contract call never receives an empty symbol.
+ */
+export function sanitizeMilestoneDescription(input: string): string {
+  const cleaned = input
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 32);
+  return cleaned.length > 0 ? cleaned : "SERVICIO";
+}
+
+/**
+ * Validate a Stellar address (G… account or C… contract) via StrKey.
+ */
+export function isValidStellarAddress(address: string): boolean {
+  const value = address.trim();
+  if (value.length === 0) {
+    return false;
+  }
+  try {
+    return StrKey.isValidEd25519PublicKey(value) || StrKey.isValidContract(value);
+  } catch {
+    return false;
+  }
+}
+
 /** Soroban RPC endpoint for contract simulations and submissions */
 const SOROBAN_RPC_URL = "https://soroban-testnet.stellar.org";
 

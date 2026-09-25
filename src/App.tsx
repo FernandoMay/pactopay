@@ -18,6 +18,7 @@ export function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/crear-factura" element={<CrearFactura />} />
           <Route path="/pagar-custodia" element={<PagarCustodia />} />
+          <Route path="/pagar/:escrowId" element={<PagarCustodia />} />
           <Route path="/panel-de-control" element={<PanelControl />} />
           <Route path="/cumplimiento-fiscal" element={<CumplimientoFiscal />} />
           <Route path="*" element={<NotFound />} />

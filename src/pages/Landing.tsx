@@ -49,7 +49,7 @@ export function Landing() {
               <div className="inline-flex items-center gap-space-xs px-space-sm py-1.5 bg-surface-container rounded-full w-fit shadow-sm">
                 <span className="text-base leading-none">🛡️</span>
                 <span className="font-label-sm text-label-sm text-on-surface font-semibold tracking-normal">
-                  Infraestructura de Custodia B2B sobre Stellar • Sin riesgos cambiarios
+                  Infraestructura de Custodia B2B sobre Stellar • Demo funcional en Testnet
                 </span>
               </div>
 
@@ -93,7 +93,7 @@ export function Landing() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-secondary text-[16px]">check_circle</span>
-                  <span>Retiro local en ARS, MXN, COP, PEN, CLP</span>
+                  <span>Contrato de custodia desplegado en testnet</span>
                 </div>
               </div>
             </div>
@@ -168,12 +168,16 @@ export function Landing() {
 
                 {/* Interactive Action Button Simulation */}
                 <div className="flex flex-col gap-space-xs">
-                  <button className="w-full py-3 bg-secondary hover:bg-secondary/90 text-on-secondary font-title-md text-title-md rounded-lg shadow-sm flex items-center justify-center gap-2 transition-all" id="heroDemoBtn">
+                  <Link
+                    className="w-full py-3 bg-secondary hover:bg-secondary/90 text-on-secondary font-title-md text-title-md rounded-lg shadow-sm flex items-center justify-center gap-2 transition-all"
+                    id="heroDemoBtn"
+                    to="/pagar-custodia"
+                  >
                     <span className="material-symbols-outlined text-[20px]">done_all</span>
-                    <span>Liberar $3,500 USDC a Cuenta Bancaria</span>
-                  </button>
-                  <p className="hidden text-center font-label-sm text-label-sm text-secondary font-semibold pt-1" id="heroFeedback">
-                    ✓ Liquidado en 3.4 seg vía red Stellar • Transferido a Bancolombia
+                    <span>Probar la custodia en testnet</span>
+                  </Link>
+                  <p className="text-center font-label-sm text-label-sm text-on-surface-variant pt-1" id="heroFeedback">
+                    Demo funcional en Stellar Testnet — verificá cada transacción en el explorer
                   </p>
                 </div>
 
@@ -181,11 +185,11 @@ export function Landing() {
                 <div className="flex items-center justify-between pt-space-xs font-label-sm text-label-sm text-on-surface-variant">
                   <span className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-[15px] text-secondary">bolt</span>
-                    Tiempo: <strong>3.8 segundos</strong>
+                    Red: <strong>Stellar Testnet</strong>
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-[15px] text-primary">analytics</span>
-                    Comisión red: <strong>&lt; $0.001 USD</strong>
+                    Contrato: <strong>verificable en el explorer</strong>
                   </span>
                 </div>
               </div>
@@ -199,21 +203,9 @@ export function Landing() {
             {/* Partner Brands Strip */}
             <div className="flex flex-col items-center gap-space-md text-center">
               <span className="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest font-semibold">
-                Respaldado e interoperable con redes bancarias y protocolos líderes en LATAM
+                Integrado con la red Stellar Testnet y billeteras del ecosistema
               </span>
               <div className="flex flex-wrap items-center justify-center gap-x-space-xl gap-y-space-md opacity-80">
-                <div className="flex items-center gap-1.5 font-title-md text-title-md text-on-surface">
-                  <span className="material-symbols-outlined text-secondary text-[22px]">account_balance</span> Mercado Pago
-                </div>
-                <div className="flex items-center gap-1.5 font-title-md text-title-md text-on-surface">
-                  <span className="material-symbols-outlined text-primary text-[22px]">domain</span> Bancolombia
-                </div>
-                <div className="flex items-center gap-1.5 font-title-md text-title-md text-on-surface">
-                  <span className="material-symbols-outlined text-secondary text-[22px]">payments</span> BBVA México
-                </div>
-                <div className="flex items-center gap-1.5 font-title-md text-title-md text-on-surface">
-                  <span className="material-symbols-outlined text-primary text-[22px]">account_balance_wallet</span> BCP Perú
-                </div>
                 <div className="flex items-center gap-1.5 font-title-md text-title-md text-on-surface">
                   <span className="material-symbols-outlined text-secondary text-[22px]">shield</span> Stellar Network
                 </div>
@@ -227,19 +219,19 @@ export function Landing() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md pt-space-md">
               <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col gap-1">
                 <div className="flex items-center justify-between text-secondary">
-                  <span className="font-label-sm text-label-sm uppercase font-semibold">Volumen Protegido</span>
+                  <span className="font-label-sm text-label-sm uppercase font-semibold">Custodia en Testnet</span>
                   <span className="material-symbols-outlined text-[20px]">verified</span>
                 </div>
-                <span className="font-amount-display text-amount-display text-primary">$12.4M+</span>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">USD liquidados sin impagos ni fraudes de devolución.</p>
+                <span className="font-amount-display text-amount-display text-primary">Demo</span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">Contrato de custodia desplegado en testnet — verificá cada transacción en el explorer.</p>
               </div>
               <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col gap-1">
                 <div className="flex items-center justify-between text-secondary">
-                  <span className="font-label-sm text-label-sm uppercase font-semibold">Velocidad</span>
+                  <span className="font-label-sm text-label-sm uppercase font-semibold">Trazabilidad</span>
                   <span className="material-symbols-outlined text-[20px]">bolt</span>
                 </div>
-                <span className="font-amount-display text-amount-display text-primary">3.8 seg</span>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">Acreditación instantánea de fondos tras aprobación.</p>
+                <span className="font-amount-display text-amount-display text-primary">Explorer</span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">Cada operación queda registrada on-chain y es pública en Stellar Expert.</p>
               </div>
               <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col gap-1">
                 <div className="flex items-center justify-between text-secondary">
@@ -307,7 +299,7 @@ export function Landing() {
                   <div className="flex flex-col gap-space-xs">
                     <h3 className="font-title-lg text-title-lg text-on-surface">Tu cliente asegura el depósito</h3>
                     <p className="font-body-md text-body-md text-on-surface-variant">
-                      El pagador internacional fondea con tarjeta bancaria o USDC. El capital queda inmovilizado en un contrato digital de Stellar, blindado e inviolable para ambas partes.
+                      El pagador fondea en USDC desde su billetera Stellar en testnet. El capital queda inmovilizado en un contrato digital de Stellar, blindado e inviolable para ambas partes.
                     </p>
                   </div>
                 </div>
@@ -329,16 +321,16 @@ export function Landing() {
                   <div className="flex flex-col gap-space-xs">
                     <h3 className="font-title-lg text-title-lg text-on-surface">Entregas el trabajo y liberas</h3>
                     <p className="font-body-md text-body-md text-on-surface-variant">
-                      Al verificar los entregables o expirar la ventana sin objeciones, el 100% se libera al instante a tu billetera y cuenta bancaria local con el mejor tipo de cambio.
+                      Al verificar los entregables o expirar la ventana sin objeciones, el 100% se libera a tu billetera Stellar en testnet, con cada paso visible en el explorer.
                     </p>
                   </div>
                 </div>
                 <div className="mt-space-lg p-space-sm bg-surface-container-lowest rounded-lg flex items-center justify-between text-on-surface">
                   <div className="flex items-center gap-space-xs font-label-sm text-label-sm text-secondary font-semibold">
                     <span className="material-symbols-outlined text-[18px]">account_balance</span>
-                    <span>Acreditado en banco local</span>
+                    <span>Acreditado en billetera testnet</span>
                   </div>
-                  <span className="font-label-sm text-label-sm text-secondary font-bold">0% mora</span>
+                  <span className="font-label-sm text-label-sm text-secondary font-bold">Verificable on-chain</span>
                 </div>
               </div>
             </div>
@@ -451,11 +443,11 @@ export function Landing() {
                       </div>
                       <div className="flex justify-between">
                         <span>Spread en moneda local</span>
-                        <span className="font-medium text-secondary font-semibold">Tasa mayorista directa</span>
+                        <span className="font-medium text-on-surface-variant font-semibold">No incluido en la demo de testnet</span>
                       </div>
                       <div className="flex justify-between text-secondary">
                         <span>Tiempo de liquidación</span>
-                        <span className="font-bold">Inmediato (3.8 seg)</span>
+                        <span className="font-bold">Tiempos de la red de prueba</span>
                       </div>
                     </div>
                   </div>
@@ -617,9 +609,9 @@ export function Landing() {
                 </div>
                 <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col gap-space-sm">
                   <span className="material-symbols-outlined text-primary text-[28px]">currency_exchange</span>
-                  <h3 className="font-title-lg text-title-lg text-on-surface">Liquidación On/Off Ramp</h3>
+                  <h3 className="font-title-lg text-title-lg text-on-surface">Registro On-Chain Verificable</h3>
                   <p className="font-body-md text-body-md text-on-surface-variant">
-                    Canal directo para convertir USDC a tu cuenta bancaria local en moneda nacional en segundos, evitando intermediarios informales.
+                    Cada movimiento de la custodia queda registrado en el contrato de testnet y puede verificarse transacción por transacción en el explorer.
                   </p>
                 </div>
               </div>
@@ -655,7 +647,7 @@ export function Landing() {
                     <span className="material-symbols-outlined text-[20px]" style={FILLED_STYLE}>star</span>
                   </div>
                   <p className="font-body-md text-body-md text-on-surface italic">
-                    "Antes perdía un 7% en transferencias bancarias y vivía con la angustia de enviar el frontend terminado antes de recibir el saldo. Con el escrow de PactoPay sé que el dinero está reservado desde el día cero."
+                    "Antes vivía con la angustia de enviar el trabajo terminado antes de recibir el saldo. Con la custodia de PactoPay, el depósito queda registrado en testnet desde el día cero."
                   </p>
                 </div>
                 <div className="flex items-center gap-space-sm pt-space-sm">
@@ -678,7 +670,7 @@ export function Landing() {
                     <span className="material-symbols-outlined text-[20px]" style={FILLED_STYLE}>star</span>
                   </div>
                   <p className="font-body-md text-body-md text-on-surface italic">
-                    "Para nuestra agencia en Medellín gestionar contratos de $15,000 USD con clientes en California era un reto burocrático enorme. Ahora creamos los 3 hitos de entrega en PactoPay y se liberan de forma automática sin fricciones."
+                    "Para nuestra agencia en Medellín gestionar contratos con clientes en California era un reto burocrático enorme. Ahora creamos los hitos de entrega en PactoPay y el flujo se sigue en testnet sin fricciones."
                   </p>
                 </div>
                 <div className="flex items-center gap-space-sm pt-space-sm">
@@ -701,7 +693,7 @@ export function Landing() {
                     <span className="material-symbols-outlined text-[20px]" style={FILLED_STYLE}>star</span>
                   </div>
                   <p className="font-body-md text-body-md text-on-surface italic">
-                    "La integración con CFDI 4.0 nos resolvió el dolor de cabeza con el SAT. El cliente en EE.UU. deposita con tarjeta corporativa y a nosotros nos llega directo el comprobante y el dinero íntegro en pesos al banco."
+                    "El panel nos ordenó el dolor de cabeza fiscal: el cliente fondea en USDC en testnet y nosotros generamos el comprobante y seguimos la custodia desde un solo lugar."
                   </p>
                 </div>
                 <div className="flex items-center gap-space-sm pt-space-sm">
@@ -748,7 +740,7 @@ export function Landing() {
                 to="/panel-de-control"
               >
                 <span className="material-symbols-outlined text-[20px]">support_agent</span>
-                <span>Hablar con Asesor B2B</span>
+                <span>Ver Panel de Custodia</span>
               </Link>
             </div>
 

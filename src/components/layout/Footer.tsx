@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 export function Footer() {
   return (
     <footer className="w-full bg-surface-container-lowest shadow-[0_-1px_6px_rgba(0,0,0,0.02)] mt-auto">
@@ -18,11 +20,21 @@ export function Footer() {
             </p>
           </div>
           <nav className="flex flex-wrap items-center justify-center gap-space-md font-body-sm text-body-sm text-on-surface-variant">
-            <span className="text-on-surface-variant">Términos de Servicio</span>
+            <Link className="hover:text-on-surface transition-colors" to="/">
+              Inicio
+            </Link>
             <span className="text-outline-variant">•</span>
-            <span className="text-on-surface-variant">Privacidad y Seguridad</span>
+            <Link className="hover:text-on-surface transition-colors" to="/crear-factura">
+              Crear Factura
+            </Link>
             <span className="text-outline-variant">•</span>
-            <span className="text-on-surface-variant">Cómo Funciona la Custodia</span>
+            <Link className="hover:text-on-surface transition-colors" to="/pagar-custodia">
+              Pagar Custodia
+            </Link>
+            <span className="text-outline-variant">•</span>
+            <Link className="hover:text-on-surface transition-colors" to="/panel-de-control">
+              Panel de Control
+            </Link>
             <span className="text-outline-variant">•</span>
             <a
               className="hover:text-on-surface transition-colors inline-flex items-center gap-1"
