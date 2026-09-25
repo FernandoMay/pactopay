@@ -35,6 +35,34 @@ const HORIZON_URL = "https://horizon-testnet.stellar.org";
 /** Network passphrase for Stellar testnet */
 const NETWORK_PASSPHRASE = Networks.TESTNET;
 
+/**
+ * USDC SAC (Stellar Asset Contract) address on testnet.
+ *
+ * The hardened escrow contract moves real SAC tokens on FUND/RELEASE/REFUND,
+ * so `create_escrow` must receive this token address. Set it via the
+ * `VITE_USDC_SAC_ADDRESS` environment variable before on-chain testing.
+ * Until the real Testnet USDC SAC address is set, on-chain calls will fail.
+ */
+export const USDC_SAC_ADDRESS: string =
+  ((import.meta as any).env?.VITE_USDC_SAC_ADDRESS as string | undefined) ??
+  "SET_USDC_SAC_ADDRESS";
+
+/**
+ * Map an escrow index to its on-chain storage key symbol.
+ *
+ * Mirrors the contract's `escrow_storage_key`: 0-9 -> `ESC_0`..`ESC_9`,
+ * 10 -> `ESC_A`. The contract panics past id 10, so indices > 10 stop.
+ */
+export function escrowSymbolForIndex(i: number): string | null {
+  if (i >= 0 && i <= 9) {
+    return `ESC_${i}`;
+  }
+  if (i === 10) {
+    return "ESC_A";
+  }
+  return null;
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type EscrowStatus =
@@ -60,6 +88,7 @@ export interface Escrow {
   id: string;
   payer: string;
   contractor: string;
+  token: string;
   totalAmount: number;
   releasedAmount: number;
   remainingAmount: number;
@@ -137,6 +166,11 @@ function stringToScVal(value: string): xdr.ScVal {
   return xdr.ScVal.scvString(value);
 }
 
+/** Convert an escrow ID (e.g. "ESC_0") to an ScVal symbol (contract takes Symbol) */
+function symbolToScVal(value: string): xdr.ScVal {
+  return xdr.ScVal.scvSymbol(value);
+}
+
 /** Convert a JS number to an ScVal u32 */
 function u32ToScVal(value: number): xdr.ScVal {
   return xdr.ScVal.scvU32(value);
@@ -145,6 +179,19 @@ function u32ToScVal(value: number): xdr.ScVal {
 /** Convert a JS number/bigint to an ScVal u64 */
 function u64ToScVal(value: number | bigint): xdr.ScVal {
   return xdr.ScVal.scvU64(xdr.Uint64.fromString(String(Math.floor(Number(value)))));
+}
+
+/** Convert a JS number/bigint to an ScVal i128 (contract total_amount type) */
+function i128ToScVal(value: number | bigint): xdr.ScVal {
+  const big = BigInt(Math.floor(Number(value)));
+  const lo = big & 0xffffffffffffffffn;
+  const hi = big >> 64n; // arithmetic shift keeps the sign for negatives
+  return xdr.ScVal.scvI128(
+    new xdr.Int128Parts({
+      hi: xdr.Int64.fromString(hi.toString()),
+      lo: xdr.Uint64.fromString(lo.toString()),
+    })
+  );
 }
 
 // ─── ScVal Decoding ─────────────────────────────────────────────────────────
@@ -341,8 +388,15 @@ export class EscrowClient {
   /**
    * Create a new escrow on-chain.
    *
-   * Calls `create_escrow(payer, contractor, total_amount, milestone_descriptions)`
-   * on the deployed Soroban contract.  The transaction is signed by the payer.
+   * Calls `create_escrow(payer, contractor, total_amount: i128, token)` on the
+   * hardened Soroban contract. Milestones are NOT part of creation — add them
+   * afterwards via separate `add_milestone` calls. The transaction is signed
+   * by the payer. No client-side transfer code is needed: FUND/RELEASE/REFUND
+   * move real SAC tokens inside the contract.
+   *
+   * SETUP REQUIRED BEFORE ON-CHAIN TESTING: set the `VITE_USDC_SAC_ADDRESS`
+   * env var (consumed as `USDC_SAC_ADDRESS`) to the real Testnet USDC SAC
+   * contract address. Until then this call throws and nothing is submitted.
    *
    * @returns `ContractResult` with `escrowId` set to the on-chain ID on success.
    */
@@ -350,31 +404,55 @@ export class EscrowClient {
     payerAddress: string,
     contractorAddress: string,
     totalAmount: number,
-    milestoneDescriptions: { description: string; amount: number }[]
+    tokenAddress: string = USDC_SAC_ADDRESS
   ): Promise<ContractResult> {
-    try {
-      // Encode milestone_descriptions as Vec<(String, u64)>
-      // In Soroban XDR, tuples are encoded as nested vectors.
-      const milestoneVec = xdr.ScVal.scvVec(
-        milestoneDescriptions.map((ms) =>
-          xdr.ScVal.scvVec([
-            stringToScVal(ms.description),
-            u64ToScVal(ms.amount),
-          ])
-        )
+    if (!tokenAddress || tokenAddress === "SET_USDC_SAC_ADDRESS") {
+      throw new Error(
+        "USDC SAC address not configured. Set the VITE_USDC_SAC_ADDRESS " +
+          "environment variable (exported as USDC_SAC_ADDRESS) to the real " +
+          "Testnet USDC SAC contract address before on-chain testing."
       );
-
+    }
+    try {
       const result = await buildSignAndSubmit(payerAddress, (contract) =>
         contract.call(
           "create_escrow",
           addressToScVal(payerAddress),
           addressToScVal(contractorAddress),
-          u64ToScVal(totalAmount),
-          milestoneVec
+          i128ToScVal(totalAmount),
+          addressToScVal(tokenAddress)
         )
       );
 
       return result;
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Add a milestone to a created escrow.
+   *
+   * Calls `add_milestone(escrow_id, description, amount)` on-chain.
+   * Signed by the payer. The sum of all milestone amounts must not
+   * exceed the escrow total. Call once per milestone after
+   * `createEscrow` and before funding.
+   */
+  async addMilestone(
+    escrowId: string,
+    description: string,
+    amount: number,
+    payerAddress: string
+  ): Promise<ContractResult> {
+    try {
+      return await buildSignAndSubmit(payerAddress, (contract) =>
+        contract.call(
+          "add_milestone",
+          symbolToScVal(escrowId),
+          symbolToScVal(description),
+          i128ToScVal(amount)
+        )
+      );
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -392,7 +470,7 @@ export class EscrowClient {
   ): Promise<ContractResult> {
     try {
       return await buildSignAndSubmit(payerAddress, (contract) =>
-        contract.call("fund_escrow", stringToScVal(escrowId))
+        contract.call("fund_escrow", symbolToScVal(escrowId))
       );
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -414,7 +492,7 @@ export class EscrowClient {
       return await buildSignAndSubmit(payerAddress, (contract) =>
         contract.call(
           "approve_milestone",
-          stringToScVal(escrowId),
+          symbolToScVal(escrowId),
           u32ToScVal(milestoneId)
         )
       );
@@ -438,7 +516,7 @@ export class EscrowClient {
       return await buildSignAndSubmit(payerAddress, (contract) =>
         contract.call(
           "release_milestone",
-          stringToScVal(escrowId),
+          symbolToScVal(escrowId),
           u32ToScVal(milestoneId)
         )
       );
@@ -450,8 +528,8 @@ export class EscrowClient {
   /**
    * Open a dispute on a milestone.
    *
-   * Calls `open_dispute(escrow_id, milestone_id)` on-chain.
-   * Signed by the caller (either payer or contractor).
+   * Calls `open_dispute(escrow_id, milestone_id, caller)` on-chain.
+   * The caller must be the payer or the contractor and signs the transaction.
    */
   async openDispute(
     escrowId: string,
@@ -462,8 +540,9 @@ export class EscrowClient {
       return await buildSignAndSubmit(callerAddress, (contract) =>
         contract.call(
           "open_dispute",
-          stringToScVal(escrowId),
-          u32ToScVal(milestoneId)
+          symbolToScVal(escrowId),
+          u32ToScVal(milestoneId),
+          addressToScVal(callerAddress)
         )
       );
     } catch (error: any) {
@@ -482,7 +561,7 @@ export class EscrowClient {
   ): Promise<ContractResult> {
     try {
       return await buildSignAndSubmit(payerAddress, (contract) =>
-        contract.call("refund_escrow", stringToScVal(escrowId))
+        contract.call("refund_escrow", symbolToScVal(escrowId))
       );
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -504,23 +583,27 @@ export class EscrowClient {
   ): Promise<Escrow | null> {
     try {
       const result = await simulateReadOnly(sourceAddress, (contract) =>
-        contract.call("get_escrow", stringToScVal(escrowId))
+        contract.call("get_escrow", symbolToScVal(escrowId))
       );
 
       if (!result || !Array.isArray(result)) {
         return null;
       }
 
-      // Expected struct field order (must match the contract's return type):
-      // [id, payer, contractor, total_amount, released_amount, status, created_at, milestones]
+      // Expected struct field order (must match the contract's Escrow struct):
+      // [id, payer, contractor, token, total_amount, released_amount,
+      //  remaining_amount, status, created_at, funded_at, milestones]
       const [
         id,
         payer,
         contractor,
+        token,
         totalAmount,
         releasedAmount,
+        remainingAmount,
         statusIndex,
         createdAt,
+        fundedAt,
         rawMilestones,
       ] = result;
 
@@ -541,12 +624,13 @@ export class EscrowClient {
         id: String(id ?? escrowId),
         payer: String(payer ?? ""),
         contractor: String(contractor ?? ""),
+        token: String(token ?? ""),
         totalAmount: Number(totalAmount ?? 0),
         releasedAmount: Number(releasedAmount ?? 0),
-        remainingAmount:
-          Number(totalAmount ?? 0) - Number(releasedAmount ?? 0),
+        remainingAmount: Number(remainingAmount ?? 0),
         status: ESCROW_STATUS_MAP[Number(statusIndex)] ?? "created",
         createdAt: Number(createdAt ?? 0),
+        fundedAt: fundedAt != null ? Number(fundedAt) : undefined,
         milestones,
       };
     } catch (error) {
@@ -559,8 +643,9 @@ export class EscrowClient {
    * Get all escrows for a given address (read-only simulation).
    *
    * Fetches the on-chain escrow count via `get_escrow_count()`, then
-   * iterates through each escrow, calling `get_escrow(i)` and filtering
-   * by payer or contractor address.
+   * iterates indices 0..count-1, mapping each to its storage key symbol
+   * (`ESC_0`..`ESC_9`, `ESC_A`) and filtering by payer or contractor.
+   * Iteration stops past index 10 — the contract panics beyond that.
    *
    * NOTE: This is O(N) simulations.  For production with many escrows,
    * consider adding a contract-side index function or caching results.
@@ -588,8 +673,13 @@ export class EscrowClient {
       // Fetch each escrow and keep only those involving the target address
       const escrows: Escrow[] = [];
       for (let i = 0; i < escrowCount; i++) {
+        const symbol = escrowSymbolForIndex(i);
+        if (symbol === null) {
+          // Contract panics past index 10 — stop iterating.
+          break;
+        }
         try {
-          const escrow = await this.getEscrow(String(i), source);
+          const escrow = await this.getEscrow(symbol, source);
           if (
             escrow &&
             (escrow.payer === address || escrow.contractor === address)
