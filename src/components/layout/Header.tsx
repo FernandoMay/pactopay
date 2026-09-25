@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useWallet } from "../wallet/WalletProvider";
+import { truncateAddress } from "../../lib/format";
 
 const NAV_ITEMS = [
   { path: "/crear-factura", label: "Crear Factura" },
@@ -11,19 +12,14 @@ const NAV_ITEMS = [
 
 export function Header() {
   const location = useLocation();
-  const { wallet, isConnected, disconnect, isFreighterInstalled, error, connect } = useWallet();
+  const { wallet, isConnected, disconnect, isFreighterInstalled, error, connect, isConnecting } = useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
 
   const isMainnet = wallet?.network === "mainnet";
   const networkLabel = wallet?.network === "testnet" ? "Testnet" : wallet?.network === "mainnet" ? "Mainnet" : "Testnet";
 
   const handleConnect = async () => {
-    setIsConnecting(true);
-    setError(null);
-    const success = await connect();
-    setIsConnecting(false);
-    return success;
+    await connect();
   };
 
   return (
@@ -116,21 +112,37 @@ export function Header() {
                   </div>
                 )}
               </div>
-            ) : (
-              <button
-                onClick={() => handleConnect()}
-                className="flex items-center gap-space-xs px-space-md py-2 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg hover:bg-surface-container-low shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-colors"
-                disabled={isConnecting}
-                style={{ opacity: isConnecting ? 0.5 : 1 }}
+            ) : !isFreighterInstalled ? (
+              <a
+                href="https://freighter.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-space-xs px-space-md py-2 rounded-lg bg-tertiary text-on-tertiary font-label-lg text-label-lg font-semibold hover:bg-tertiary/90 transition-colors"
+                title="Necesitás la extensión de Freighter para conectar tu billetera Stellar"
               >
-                <span className="material-symbols-outlined text-[18px] text-on-surface-variant">
-                  account_balance_wallet
+                <span className="material-symbols-outlined text-[18px]">
+                  download
                 </span>
-                <span className="hidden sm:inline">Conectar Billetera</span>
-                {isConnecting && (
-                  <span className="material-symbols-outlined text-[14px] ml-2">autorenew</span>
+                <span className="hidden sm:inline">Instalar Freighter</span>
+              </a>
+            ) : (
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  onClick={() => handleConnect()}
+                  className="flex items-center gap-space-xs px-space-md py-2 rounded-lg bg-surface-container-lowest text-on-surface font-label-lg text-label-lg hover:bg-surface-container-low shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-colors disabled:opacity-50"
+                  disabled={isConnecting}
+                >
+                  <span className="material-symbols-outlined text-[18px] text-on-surface-variant">
+                    account_balance_wallet
+                  </span>
+                  <span className="hidden sm:inline">{isConnecting ? "Conectando..." : "Conectar Billetera"}</span>
+                </button>
+                {error && (
+                  <span className="hidden sm:block text-[11px] text-error max-w-[220px] text-right leading-tight">
+                    {error}
+                  </span>
                 )}
-              </button>
+              </div>
             )}
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
               <span className="material-symbols-outlined text-on-primary text-[18px]">person</span>
