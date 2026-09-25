@@ -51,7 +51,7 @@ export async function getUsdcBalance(publicKey: string): Promise<number> {
       (b: any) =>
         b.asset_type !== "native" &&
         b.asset_code === "USDC" &&
-        b.asset_issuer === "GA5ZSEJYB37JDD5G4LYX3M6T6N3V42GFIMXTO24ELCKZ54U3BKHUFCUG"
+        b.asset_issuer === "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
     );
     return usdcBalance ? parseFloat(usdcBalance.balance) : 0;
   } catch {
@@ -83,7 +83,7 @@ export async function buildPaymentTransaction(
   toAddress: string,
   amount: string,
   assetCode = "USDC",
-  assetIssuer = "GA5ZSEJYB37JDD5G4LYX3M6T6N3V42GFIMXTO24ELCKZ54U3BKHUFCUG"
+  assetIssuer = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
 ): Promise<StellarSdk.Transaction> {
   const server = new StellarSdk.Horizon.Server(HORIZON_URL);
   const account = await server.loadAccount(fromAddress);

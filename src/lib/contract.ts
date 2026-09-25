@@ -4,8 +4,8 @@
  * Real Soroban smart contract integration using @stellar/stellar-sdk.
  * All transactions are built, simulated, signed via Freighter, and submitted on-chain.
  *
- * Deployed contract: CCADBBE7UC2TWIWT634L76YSQ5NF65ZK7E7QLLCTUDG5X77VRHN7ITFQ
- * Explorer: https://stellar.expert/explorer/testnet/contract/CCADBBE7UC2TWIWT634L76YSQ5NF65ZK7E7QLLCTUDG5X77VRHN7ITFQ
+ * Deployed contract: CDYOE2URCONPH6XUVAJHMVAMGMKGVS3JZ7TOTXIMWWBKS573CG6XPWEV
+ * Explorer: https://stellar.expert/explorer/testnet/contract/CDYOE2URCONPH6XUVAJHMVAMGMKGVS3JZ7TOTXIMWWBKS573CG6XPWEV
  */
 
 import {
@@ -24,7 +24,7 @@ import {
 
 /** Deployed Soroban escrow contract on Stellar testnet */
 const CONTRACT_ADDRESS =
-  "CCADBBE7UC2TWIWT634L76YSQ5NF65ZK7E7QLLCTUDG5X77VRHN7ITFQ";
+  "CDYOE2URCONPH6XUVAJHMVAMGMKGVS3JZ7TOTXIMWWBKS573CG6XPWEV";
 
 /** Soroban RPC endpoint for contract simulations and submissions */
 const SOROBAN_RPC_URL = "https://soroban-testnet.stellar.org";
@@ -45,7 +45,7 @@ const NETWORK_PASSPHRASE = Networks.TESTNET;
  */
 export const USDC_SAC_ADDRESS: string =
   ((import.meta as any).env?.VITE_USDC_SAC_ADDRESS as string | undefined) ??
-  "SET_USDC_SAC_ADDRESS";
+  "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA";
 
 /**
  * Map an escrow index to its on-chain storage key symbol.

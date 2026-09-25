@@ -1,8 +1,8 @@
 /**
  * Soroban Escrow Contract Integration for PactoPay Mobile
  * 
- * Contract: CCADBBE7UC2TWIWT634L76YSQ5NF65ZK7E7QLLCTUDG5X77VRHN7ITFQ
- * USDC Issuer: GA5ZSEJYB37JDD5G4LYX3M6T6N3V42GFIMXTO24ELCKZ54U3BKHUFCUG
+ * Contract: CDYOE2URCONPH6XUVAJHMVAMGMKGVS3JZ7TOTXIMWWBKS573CG6XPWEV
+ * USDC Issuer: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
  * Network: Testnet
  * 
  * 10 functions: create_escrow, add_milestone, fund_escrow, 
@@ -13,9 +13,9 @@
 import { Contract, useAccount, readContract, writeContract, stringToSymbol } from 'stellar-sdk';
 
 // Contract ID on Testnet
-export const ESCROW_CONTRACT = 'CCADBBE7UC2TWIWT634L76YSQ5NF65ZK7E7QLLCTUDG5X77VRHN7ITFUSDC';
+export const ESCROW_CONTRACT = 'CDYOE2URCONPH6XUVAJHMVAMGMKGVS3JZ7TOTXIMWWBKS573CG6XPWEV';
 
-export const USDC_ISSUER = 'GA5ZSEJYB37JDD5G4LYX3M6T6N3V42GFIMXTO24ELCKZ54U3BKHUFCUG';
+export const USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 
 /**
  * USDC SAC (Stellar Asset Contract) address on testnet.
@@ -25,7 +25,7 @@ export const USDC_ISSUER = 'GA5ZSEJYB37JDD5G4LYX3M6T6N3V42GFIMXTO24ELCKZ54U3BKHU
  * SETUP REQUIRED BEFORE ON-CHAIN TESTING: replace the placeholder below with
  * the real Testnet USDC SAC contract address. Until then on-chain calls fail.
  */
-export const USDC_SAC_ADDRESS: string = 'SET_USDC_SAC_ADDRESS';
+export const USDC_SAC_ADDRESS: string = 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA';
 
 /**
  * Map an escrow index to its on-chain storage key symbol.

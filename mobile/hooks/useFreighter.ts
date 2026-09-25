@@ -107,11 +107,13 @@ export function useFreighter(options: FreighterOptions = {}) {
         return { success: false, error: 'Freighter not installed' };
       }
 
-      // Wait for the user to complete connection in Freighter app
-      // Then refresh the wallet state
-      await refreshWalletAfterConnect();
-
-      return { success: true, address: wallet.address };
+      // The mobile return-flow from Freighter is not implemented yet, so we
+      // must NOT pretend the wallet connected (no mock addresses/balances).
+      return {
+        success: false,
+        error:
+          'Mobile wallet return-flow not implemented yet — use the web app with the Freighter extension.',
+      };
     } catch (err) {
       console.error('Error connecting wallet:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
@@ -119,20 +121,10 @@ export function useFreighter(options: FreighterOptions = {}) {
   };
 
   // Refresh wallet state after Freighter connection
+  // NOT IMPLEMENTED: explicit stub so no mock wallet state is ever
+  // presented as a real connection.
   const refreshWalletAfterConnect = async (): Promise<void> => {
-    // En un implementación completa, escucharíamos el evento de conexión
-    // y actualizaríamos el state. Por ahora, simulamos un balance.
-    setTimeout(() => {
-      // Dirección de ejemplo para Testnet
-      const exampleAddress = 'GA5ZSEJYB37JDD5G4LYX3M6T6N3V42GFIMXTO24ELCKZ54U3BKHUFCUG';
-      setWallet({
-        address: exampleAddress,
-        isConnected: true,
-        isFreighterInstalled: true,
-        network: 'testnet',
-        balance: '12.50',
-      });
-    }, 1500);
+    console.warn('refreshWalletAfterConnect: mobile return-flow not implemented');
   };
 
   // Cambiar de red
@@ -148,11 +140,9 @@ export function useFreighter(options: FreighterOptions = {}) {
 
   // Obtener balance
   const refreshBalance = async (): Promise<void> => {
-    // En producción real, would call Soroban RPC o Horizon
-    setTimeout(() => {
-      const randomBalance = (Math.random() * 100).toFixed(2);
-      setWallet(prev => ({ ...prev, balance: randomBalance }));
-    }, 500);
+    // NOT IMPLEMENTED: no mock balances. Balance stays as-is until a real
+    // Horizon/Soroban query is wired for mobile.
+    console.warn('refreshBalance: mobile balance query not implemented');
   };
 
   // Desconectar
