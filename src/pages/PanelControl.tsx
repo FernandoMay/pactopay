@@ -207,7 +207,7 @@ export function PanelControl() {
 
   const handleShareState = () => {
     if (!selected) return;
-    navigator.clipboard.writeText(`https://pactopay.lat/pagar/${selected.id}`).then(() => {
+    navigator.clipboard.writeText(`${window.location.origin}/pagar/${selected.id}`).then(() => {
       setLinkCopied(true);
     });
   };

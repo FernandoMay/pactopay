@@ -32,7 +32,7 @@ export function CrearFactura() {
     "Integración de Interfaz UI/UX en Diseño Responsive y Conexión con Stellar SDK"
   );
   const [term, setTerm] = useState("14 días para revisar");
-  const [invoiceId, setInvoiceId] = useState("INV-2026-0042");
+  const [invoiceId, setInvoiceId] = useState("INV-pendiente");
   const [paymentLink, setPaymentLink] = useState("");
   const [createdEscrowId, setCreatedEscrowId] = useState<string | null>(null);
   const [txRecords, setTxRecords] = useState<TxRecord[]>([]);
@@ -133,7 +133,7 @@ export function CrearFactura() {
       setTxRecords(records);
       setCreatedEscrowId(fresh.id);
       setInvoiceId(`INV-${fresh.id}`);
-      setPaymentLink(`https://pactopay.lat/pagar/${fresh.id}`);
+      setPaymentLink(`${window.location.origin}/pagar/${fresh.id}`);
       succeed(milestone.hash ?? created.hash ?? "");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error al crear la custodia en testnet.";
