@@ -358,49 +358,72 @@ export function CrearFactura() {
                 </p>
               </div>
 
-              {/* Token SAC address (real on-chain requirement, no longer hardcoded) */}
+              {/* Token selector (friendly options; raw SAC address lives under Avanzado) */}
               <div className="flex flex-col gap-1.5">
                 <label className="font-label-lg text-label-lg text-on-surface flex items-center justify-between font-medium">
-                  <span>Token (dirección contrato SAC)</span>
-                  <span className="text-body-sm font-body-sm text-on-surface-variant">USDC por defecto</span>
+                  <span>Token de la custodia</span>
+                  <span className="text-body-sm font-body-sm text-on-surface-variant">Red Testnet</span>
                 </label>
-                <div className="relative flex items-center">
-                  <span className="material-symbols-outlined absolute left-3 text-outline text-[20px] pointer-events-none">token</span>
-                  <input
-                    className="w-full h-11 pl-10 pr-3 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md font-mono focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all shadow-inner"
-                    placeholder="C…"
-                    type="text"
-                    spellCheck={false}
-                    value={tokenAddress}
-                    onChange={(e) => setTokenAddress(e.target.value)}
-                  />
-                </div>
-                {!tokenValid && tokenAddress.trim() !== "" && (
-                  <p className="font-body-sm text-body-sm text-error">
-                    Dirección de token inválida: debe ser un contrato SAC de 56 caracteres que empiece con C.
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center gap-space-xs">
-                  <button
-                    type="button"
-                    onClick={() => setTokenAddress(TESTUSDC_SAC_ADDRESS)}
-                    className="px-3 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold transition-colors"
-                  >
-                    Usar TESTUSDC verificado
-                  </button>
-                  <span className="font-body-sm text-body-sm text-on-surface-variant">
-                    Para XLM de gas:{" "}
-                    <a
-                      href={friendbotHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary font-semibold hover:underline"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-xs">
+                  {[
+                    { value: USDC_SAC_ADDRESS, label: "USDC", sub: "Dólar oficial de Circle" },
+                    { value: TESTUSDC_SAC_ADDRESS, label: "TESTUSDC", sub: "Token de prueba verificado on-chain", top: true },
+                  ].map((t) => (
+                    <button
+                      key={t.label}
+                      type="button"
+                      onClick={() => setTokenAddress(t.value)}
+                      className={`px-3 py-2.5 rounded-lg text-left transition-all font-label-md text-label-md flex flex-col gap-0.5 ${
+                        tokenTrimmed === t.value
+                          ? "bg-primary text-on-primary shadow-sm"
+                          : "bg-surface-container-low text-on-surface hover:bg-surface-container"
+                      }`}
                     >
-                      fondear con Friendbot
-                    </a>
-                    . El USDC de Circle en testnet debe venir de un emisor/faucet; el preset TESTUSDC es el token auto-emitido usado en la corrida on-chain verificada.
-                  </span>
+                      <span className="font-bold flex items-center justify-between">
+                        {t.label}
+                        {t.top && (
+                          <span className={`text-[10px] uppercase font-bold tracking-wider px-1 rounded ${tokenTrimmed === t.value ? "bg-on-primary/20 text-on-primary" : "bg-primary/10 text-primary"}`}>Testnet</span>
+                        )}
+                      </span>
+                      <span className={tokenTrimmed === t.value ? "opacity-80 font-body-sm text-body-sm" : "text-on-surface-variant font-body-sm text-body-sm"}>
+                        {t.sub}
+                      </span>
+                    </button>
+                  ))}
                 </div>
+                <details className="rounded-lg bg-surface-container-low px-3 py-2">
+                  <summary className="cursor-pointer font-label-md text-label-md text-on-surface-variant font-medium">
+                    Avanzado: dirección del contrato del token
+                  </summary>
+                  <div className="relative flex items-center mt-2">
+                    <span className="material-symbols-outlined absolute left-3 text-outline text-[20px] pointer-events-none">token</span>
+                    <input
+                      className="w-full h-11 pl-10 pr-3 rounded-lg bg-surface-container-lowest text-on-surface font-body-md text-body-md font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all shadow-inner"
+                      placeholder="C…"
+                      type="text"
+                      spellCheck={false}
+                      value={tokenAddress}
+                      onChange={(e) => setTokenAddress(e.target.value)}
+                    />
+                  </div>
+                  {!tokenValid && tokenAddress.trim() !== "" && (
+                    <p className="font-body-sm text-body-sm text-error mt-1">
+                      Dirección de token inválida: debe ser un contrato de 56 caracteres que empiece con C.
+                    </p>
+                  )}
+                </details>
+                <span className="font-body-sm text-body-sm text-on-surface-variant">
+                  Para XLM de gas:{" "}
+                  <a
+                    href={friendbotHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary font-semibold hover:underline"
+                  >
+                    fondear con Friendbot
+                  </a>
+                  . El USDC de Circle en testnet debe venir de un emisor/faucet; TESTUSDC es el token usado en la corrida on-chain verificada.
+                </span>
               </div>
 
               {/* Amount */}
