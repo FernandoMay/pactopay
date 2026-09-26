@@ -894,9 +894,9 @@ export function CrearFactura() {
               <span>Cumplimiento con directrices bancarias internacionales de custodia comercial (Escrow B2B).</span>
             </div>
             <div className="flex items-center gap-space-sm">
-              <span className="font-semibold text-on-surface">Auditorías criptográficas públicas</span>
+              <span className="font-semibold text-on-surface">Contrato verificado en Testnet</span>
               <span className="text-outline-variant">•</span>
-              <span>Cero incidentes de seguridad registrados</span>
+              <span>Cada operación deja un hash en el explorer</span>
             </div>
           </div>
         </section>
