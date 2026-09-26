@@ -95,6 +95,83 @@ export const USDC_SAC_ADDRESS: string =
   "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA";
 
 /**
+ * Self-issued test token (TESTUSDC) SAC address used in the verified
+ * on-chain happy-path run. Circle USDC (`USDC_SAC_ADDRESS`) remains the
+ * default token in the UI; this constant is offered as a one-click preset
+ * because the test run proved funding + release work end-to-end with it.
+ */
+export const TESTUSDC_SAC_ADDRESS: string =
+  "CABXDBJXAJO2CVYDCB52JEWATVEVZEOPFWHTWKBET5FPNWQVOTKJFEUL";
+
+/**
+ * Trustline signal for a SAC balance probe: `getSACBalance` returns `null`
+ * when the account has no trustline (the SAC `balance` call reverts), so
+ * `null` means "no trustline" while `0` means "trustline with zero balance".
+ */
+export function hasTrustline(balance: number | null): boolean {
+  return balance !== null;
+}
+
+/**
+ * Read-only SAC `balance` probe for any token contract.
+ *
+ * Mirrors `simulateReadOnly` but targets the token SAC (`tokenAddress`)
+ * instead of the escrow contract: calls `balance(account)` via simulation
+ * (never submitted, no signature needed). `sourceAddress` must be a funded
+ * account (the connected wallet works).
+ *
+ * The SAC returns an i128 in raw units (7 decimals); it is converted to a
+ * float (raw / 1e7). Returns `null` (not 0!) when the call fails — a missing
+ * trustline makes SAC `balance` revert, and null-vs-0 is the trustline signal.
+ */
+export async function getSACBalance(
+  tokenAddress: string,
+  accountAddress: string,
+  sourceAddress: string
+): Promise<number | null> {
+  try {
+    const rpcServer = getRpcServer();
+    const horizonServer = getHorizonServer();
+    const tokenContract = new Contract(tokenAddress);
+
+    const account = await horizonServer.loadAccount(sourceAddress);
+
+    const tx = new TransactionBuilder(account, {
+      fee: BASE_FEE,
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(tokenContract.call("balance", addressToScVal(accountAddress)))
+      .setTimeout(300)
+      .build();
+
+    const simulateResponse = await rpcServer.simulateTransaction(tx);
+
+    if ("error" in simulateResponse && simulateResponse.error) {
+      return null;
+    }
+
+    const successResp = simulateResponse as any;
+    if (!successResp.result?.retval) {
+      return null;
+    }
+
+    const native = scValToNative(successResp.result.retval as xdr.ScVal);
+    let raw: bigint;
+    try {
+      raw = BigInt(String(native).trim());
+    } catch {
+      return null;
+    }
+    // SAC amounts use 7 decimals.
+    return Number(raw) / 10_000_000;
+  } catch {
+    // Missing trustline, unfunded account, bad token address, or RPC error:
+    // all surface as null so the UI can warn instead of showing a fake 0.
+    return null;
+  }
+}
+
+/**
  * Map an escrow index to its on-chain storage key symbol.
  *
  * Mirrors the contract's `escrow_storage_key`: 0-9 -> `ESC_0`..`ESC_9`,

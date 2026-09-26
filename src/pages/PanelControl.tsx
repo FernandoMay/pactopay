@@ -5,6 +5,7 @@ import {
   escrowClient,
   explorerTxUrl,
   EXPLORER_CONTRACT_URL,
+  getSACBalance,
   type ContractResult,
   type Escrow,
   type EscrowStatus,
@@ -135,9 +136,19 @@ export function PanelControl() {
 
   const handleReleaseDirect = (milestone: Milestone) => {
     if (!selected || !walletAddress) return;
-    void runWrite(`release-${milestone.id}`, `Liberación hito ${milestone.id} (${selected.id})`, () =>
-      escrowClient.releaseMilestone(selected.id, milestone.id, walletAddress)
-    );
+    const escrow = selected;
+    const contractorShort = truncateAddress(escrow.contractor, 4);
+    // Trustline gate: without it the on-chain release reverts (CLI lesson).
+    void (async () => {
+      const trust = await getSACBalance(escrow.token, escrow.contractor, walletAddress);
+      if (trust === null) {
+        fail(`El contractor (${contractorShort}) no tiene trustline al token: el release on-chain va a revertir. Pedile que agregue el asset primero.`);
+        return;
+      }
+      await runWrite(`release-${milestone.id}`, `Liberación hito ${milestone.id} (${escrow.id})`, () =>
+        escrowClient.releaseMilestone(escrow.id, milestone.id, walletAddress)
+      );
+    })();
   };
 
   const handleDispute = (milestone: Milestone) => {
@@ -173,6 +184,13 @@ export function PanelControl() {
   // Modal drives the real two-step flow: approve (if needed) then release.
   const handleReleaseConfirm = async () => {
     if (!selected || !pendingRelease || !walletAddress) return;
+    // Trustline gate before any write: without it the release reverts on-chain.
+    const contractorShort = truncateAddress(selected.contractor, 4);
+    const trust = await getSACBalance(selected.token, selected.contractor, walletAddress);
+    if (trust === null) {
+      fail(`El contractor (${contractorShort}) no tiene trustline al token: el release on-chain va a revertir. Pedile que agregue el asset primero.`);
+      return;
+    }
     setReleasing(true);
     startSigning();
     try {

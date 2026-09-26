@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   formatLatamCurrency,
   calculateFees,
@@ -12,6 +12,10 @@ import {
   explorerTxUrl,
   EXPLORER_CONTRACT_URL,
   ESCROW_CONTRACT_ADDRESS,
+  USDC_SAC_ADDRESS,
+  TESTUSDC_SAC_ADDRESS,
+  getSACBalance,
+  hasTrustline,
 } from "../lib/contract";
 import { useWallet } from "../components/wallet/WalletProvider";
 import { TxFeedback, useTxFeedback } from "../components/ui/TxFeedback";
@@ -39,10 +43,44 @@ export function CrearFactura() {
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tokenAddress, setTokenAddress] = useState(USDC_SAC_ADDRESS);
+  // Pre-flight probes: undefined = not checked yet, null = no trustline/RPC fail.
+  const [payerBalance, setPayerBalance] = useState<number | null | undefined>(undefined);
+  const [contractorBalance, setContractorBalance] = useState<number | null | undefined>(undefined);
+  const [checkingPreflight, setCheckingPreflight] = useState(false);
 
   const fees = calculateFees(amount);
   const localEstimates = getLocalEstimates(amount);
   const contractorValid = contractorAddress.trim() === "" ? null : isValidStellarAddress(contractorAddress);
+  const tokenTrimmed = tokenAddress.trim();
+  const tokenValid =
+    tokenTrimmed.length === 56 && tokenTrimmed.startsWith("C") && isValidStellarAddress(tokenTrimmed);
+  const showPreflight = isConnected && !!wallet && contractorValid === true;
+  const friendbotHref = wallet
+    ? `https://friendbot.stellar.org/?addr=${wallet.address}`
+    : "https://friendbot.stellar.org/";
+
+  const checkPreflight = async () => {
+    if (!wallet || contractorValid !== true || !tokenValid) return;
+    setCheckingPreflight(true);
+    try {
+      const payer = await getSACBalance(tokenTrimmed, wallet.address, wallet.address);
+      setPayerBalance(payer);
+      const contractor = await getSACBalance(tokenTrimmed, contractorAddress.trim(), wallet.address);
+      setContractorBalance(contractor);
+    } finally {
+      setCheckingPreflight(false);
+    }
+  };
+
+  // Auto-check once the wallet connects (explicit "Verificar" button covers re-checks).
+  useEffect(() => {
+    if (wallet && contractorValid === true && tokenValid && payerBalance === undefined && !checkingPreflight) {
+      void checkPreflight();
+    }
+    // Intentionally only auto-runs on wallet connect; manual edits re-check via button.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet?.address]);
 
   const mailtoHref = () => {
     const recipient = clientEmail.includes("@") ? clientEmail : "";
@@ -72,6 +110,10 @@ export function CrearFactura() {
       setFormError("Ingresá la dirección Stellar (G…) del contratista. El contrato la exige como dirección válida.");
       return;
     }
+    if (!tokenValid) {
+      setFormError("Ingresá un token válido: dirección de contrato SAC de 56 caracteres que empiece con C.");
+      return;
+    }
     const total = Math.floor(amount);
     if (!Number.isFinite(total) || total <= 0) {
       setFormError("El monto debe ser mayor a cero.");
@@ -83,6 +125,26 @@ export function CrearFactura() {
     }
 
     const payerAddress = wallet.address;
+    // Fresh on-chain funding gate: the escrow cannot be funded without a real
+    // token balance, so block submit when the payer lacks funds or trustline.
+    try {
+      const freshPayerBalance = await getSACBalance(tokenTrimmed, payerAddress, payerAddress);
+      setPayerBalance(freshPayerBalance);
+      if (freshPayerBalance === null) {
+        setFormError("Sin trustline/saldo del token elegido: fondeá la cuenta primero. Sin balance real el fondeo on-chain va a fallar.");
+        setIsSubmitting(false);
+        return;
+      }
+      if (freshPayerBalance < total) {
+        setFormError(`Saldo insuficiente del token: tenés ${freshPayerBalance.toFixed(2)} y la custodia necesita ${total.toFixed(2)}. Fondeá la cuenta primero.`);
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      setFormError("No se pudo verificar el saldo del token en testnet. Revisá la conexión e intentá de nuevo.");
+      setIsSubmitting(false);
+      return;
+    }
     setIsSubmitting(true);
     startSigning();
 
@@ -100,7 +162,8 @@ export function CrearFactura() {
       const created = await escrowClient.createEscrow(
         payerAddress,
         contractorAddress.trim(),
-        total
+        total,
+        tokenTrimmed
       );
       if (!created.success) {
         throw new Error(created.error || "No se pudo crear la custodia en testnet.");
@@ -295,6 +358,51 @@ export function CrearFactura() {
                 </p>
               </div>
 
+              {/* Token SAC address (real on-chain requirement, no longer hardcoded) */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-label-lg text-label-lg text-on-surface flex items-center justify-between font-medium">
+                  <span>Token (dirección contrato SAC)</span>
+                  <span className="text-body-sm font-body-sm text-on-surface-variant">USDC por defecto</span>
+                </label>
+                <div className="relative flex items-center">
+                  <span className="material-symbols-outlined absolute left-3 text-outline text-[20px] pointer-events-none">token</span>
+                  <input
+                    className="w-full h-11 pl-10 pr-3 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md font-mono focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all shadow-inner"
+                    placeholder="C…"
+                    type="text"
+                    spellCheck={false}
+                    value={tokenAddress}
+                    onChange={(e) => setTokenAddress(e.target.value)}
+                  />
+                </div>
+                {!tokenValid && tokenAddress.trim() !== "" && (
+                  <p className="font-body-sm text-body-sm text-error">
+                    Dirección de token inválida: debe ser un contrato SAC de 56 caracteres que empiece con C.
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-space-xs">
+                  <button
+                    type="button"
+                    onClick={() => setTokenAddress(TESTUSDC_SAC_ADDRESS)}
+                    className="px-3 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold transition-colors"
+                  >
+                    Usar TESTUSDC verificado
+                  </button>
+                  <span className="font-body-sm text-body-sm text-on-surface-variant">
+                    Para XLM de gas:{" "}
+                    <a
+                      href={friendbotHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary font-semibold hover:underline"
+                    >
+                      fondear con Friendbot
+                    </a>
+                    . El USDC de Circle en testnet debe venir de un emisor/faucet; el preset TESTUSDC es el token auto-emitido usado en la corrida on-chain verificada.
+                  </span>
+                </div>
+              </div>
+
               {/* Amount */}
               <div className="flex flex-col gap-1.5">
                 <label className="font-label-lg text-label-lg text-on-surface flex items-center justify-between font-medium">
@@ -447,6 +555,54 @@ export function CrearFactura() {
                 <div className="p-space-sm rounded-lg bg-error-container text-on-error-container font-body-sm text-body-sm flex items-start gap-2">
                   <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">error</span>
                   <span>{formError}</span>
+                </div>
+              )}
+
+              {/* Pre-flight on-chain checks (real reads, no mocks) */}
+              {showPreflight && (
+                <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-2.5 shadow-inner">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-label-lg text-label-lg font-bold text-on-surface">
+                      Verificación previa en testnet
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void checkPreflight()}
+                      disabled={checkingPreflight || !tokenValid}
+                      className="px-3 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold transition-colors shrink-0 disabled:opacity-60"
+                    >
+                      {checkingPreflight ? "Verificando..." : "Verificar"}
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between text-body-md font-body-md">
+                    <span className="text-on-surface-variant">Tu saldo del token elegido:</span>
+                    <span className="font-semibold text-on-surface">
+                      {checkingPreflight
+                        ? "Leyendo desde testnet..."
+                        : payerBalance === undefined
+                          ? "Pendiente de verificación"
+                          : payerBalance === null
+                            ? "Sin trustline/saldo: fondeá la cuenta primero"
+                            : `${payerBalance.toFixed(2)} (necesitás ${Math.floor(amount).toFixed(2)})`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-body-md font-body-md">
+                    <span className="text-on-surface-variant">Trustline del contratista:</span>
+                    <span className={`font-semibold ${contractorBalance === null ? "text-error" : "text-on-surface"}`}>
+                      {checkingPreflight
+                        ? "Leyendo desde testnet..."
+                        : contractorBalance === undefined
+                          ? "Pendiente de verificación"
+                          : contractorBalance !== null && hasTrustline(contractorBalance)
+                            ? `OK (${contractorBalance.toFixed(2)})`
+                            : "ADVERTENCIA: el contractor necesita trustline al asset o el release va a fallar"}
+                    </span>
+                  </div>
+                  {payerBalance !== undefined && payerBalance !== null && payerBalance < Math.floor(amount) && (
+                    <p className="font-body-sm text-body-sm text-error">
+                      Saldo insuficiente: no vas a poder fondear esta custodia hasta conseguir más tokens.
+                    </p>
+                  )}
                 </div>
               )}
 

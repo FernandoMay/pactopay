@@ -5,6 +5,7 @@ import {
   escrowClient,
   EXPLORER_CONTRACT_URL,
   ESCROW_CONTRACT_ADDRESS,
+  getSACBalance,
   type Escrow,
   type EscrowStatus,
   type MilestoneStatus,
@@ -50,6 +51,9 @@ export function PagarCustodia() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [depositing, setDepositing] = useState(false);
   const [deposited, setDeposited] = useState(false);
+  // Deposit gate: undefined = not checked yet, null = no trustline/RPC fail.
+  const [sacBalance, setSacBalance] = useState<number | null | undefined>(undefined);
+  const [checkingBalance, setCheckingBalance] = useState(false);
   const { txState, startSigning, startSubmitting, succeed, fail, reset } = useTxFeedback();
 
   const loadEscrow = useCallback(
@@ -66,6 +70,7 @@ export function PagarCustodia() {
       setLoading(true);
       setLoadError(null);
       setDeposited(false);
+      setSacBalance(undefined);
       try {
         const data = await escrowClient.getEscrow(trimmed, wallet.address);
         if (!data) {
@@ -92,11 +97,67 @@ export function PagarCustodia() {
     }
   }, [routeEscrowId, isConnected, wallet, escrow, loading, loadError, loadEscrow]);
 
+  // Probe the payer SAC balance for the escrow token (real read, no mocks).
+  // `null` means no trustline/RPC fail; the deposit stays disabled in that case.
+  useEffect(() => {
+    if (!escrow || !wallet || escrow.status !== "created") return;
+    let cancelled = false;
+    setCheckingBalance(true);
+    getSACBalance(escrow.token, wallet.address, wallet.address)
+      .then((bal) => {
+        if (!cancelled) setSacBalance(bal);
+      })
+      .catch(() => {
+        if (!cancelled) setSacBalance(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingBalance(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [escrow, wallet]);
+
+  const requiredAmount = escrow
+    ? escrow.remainingAmount > 0
+      ? escrow.remainingAmount
+      : escrow.totalAmount
+    : 0;
+  const balanceInsufficient =
+    sacBalance !== undefined && sacBalance !== null && sacBalance < requiredAmount;
+  const balanceMissing = sacBalance === null;
+
   const handleDeposit = async () => {
     if (!escrow) return;
     if (!isConnected || !wallet) {
       await connect();
       fail("Conectá tu billetera Freighter para firmar el depósito en testnet.");
+      return;
+    }
+    // Only Created escrows can be funded; every other status has a next step.
+    if (escrow.status !== "created") {
+      fail(
+        escrow.status === "funded"
+          ? "Esta custodia ya está fondeada: el siguiente paso es aprobar en el Panel de Control."
+          : "Esta custodia ya no admite depósitos: revisá su estado en el Panel de Control."
+      );
+      return;
+    }
+    // Fresh funding gate with the escrow token (real read, no mocks).
+    try {
+      const fresh = await getSACBalance(escrow.token, wallet.address, wallet.address);
+      setSacBalance(fresh);
+      const needed = escrow.remainingAmount > 0 ? escrow.remainingAmount : escrow.totalAmount;
+      if (fresh === null) {
+        fail("Sin trustline/saldo del token de esta custodia: fondeá la cuenta primero. Sin balance real el depósito va a fallar.");
+        return;
+      }
+      if (fresh < needed) {
+        fail(`Saldo insuficiente del token: tenés ${fresh.toFixed(2)} y el depósito necesita ${needed.toFixed(2)}. Fondeá la cuenta primero.`);
+        return;
+      }
+    } catch {
+      fail("No se pudo verificar el saldo del token en testnet. Intentá de nuevo.");
       return;
     }
     setDepositing(true);
@@ -443,34 +504,104 @@ export function PagarCustodia() {
                 </div>
               </div>
 
-              {/* CTA */}
+              {/* CTA: gated by on-chain status + real token balance */}
               <div className="flex flex-col gap-space-xs pt-space-xs">
-                <button
-                  onClick={() => void handleDeposit()}
-                  disabled={deposited || depositing}
-                  className={`w-full py-4 px-space-lg rounded-xl font-headline-sm text-headline-sm font-bold flex items-center justify-center gap-space-sm transition-all active:scale-[0.99] ${
-                    deposited
-                      ? "bg-surface-container-high text-on-surface-variant cursor-default"
-                      : "bg-secondary hover:bg-on-secondary-container text-on-secondary shadow-[0_10px_20px_-5px_rgba(0,108,74,0.3)] cursor-pointer"
-                  }`}
-                >
-                  {depositing ? (
-                    <>
-                      <span className="material-symbols-outlined text-[24px] animate-spin">progress_activity</span>
-                      <span>Firmando depósito en Freighter...</span>
-                    </>
-                  ) : deposited ? (
-                    <>
-                      <span className="material-symbols-outlined text-[24px] text-secondary">check_circle</span>
-                      <span>Fondos Depositados en Custodia</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="material-symbols-outlined text-[24px]">shield</span>
-                      <span>Depositar {formatLatamCurrency(escrow.totalAmount)} en Custodia Protegida</span>
-                    </>
-                  )}
-                </button>
+                {escrow.status !== "created" ? (
+                  <div className="p-space-md rounded-xl bg-surface-container flex flex-col gap-1">
+                    {escrow.status === "funded" && (
+                      <>
+                        <span className="font-title-md text-title-md font-bold text-on-surface">
+                          Custodia fondeada: el siguiente paso es aprobar en el Panel
+                        </span>
+                        <span className="font-body-sm text-body-sm text-on-surface-variant">
+                          Los fondos ya están en custodia. Aprobá cada hito desde el Panel de Control para liberarlos.
+                        </span>
+                        <Link
+                          className="font-label-md text-label-md text-primary font-semibold hover:underline"
+                          to="/panel-de-control"
+                        >
+                          Ir al Panel de Control
+                        </Link>
+                      </>
+                    )}
+                    {(escrow.status === "partial" || escrow.status === "completed") && (
+                      <>
+                        <span className="font-title-md text-title-md font-bold text-secondary">
+                          {escrow.status === "completed" ? "Custodia completada" : "Liberación parcial en curso"}
+                        </span>
+                        <span className="font-body-sm text-body-sm text-on-surface-variant">
+                          {escrow.status === "completed"
+                            ? "Todos los fondos ya fueron liberados. No hace falta ningún depósito más."
+                            : "Parte de los fondos ya se liberó. Seguí la liberación restante desde el Panel de Control."}
+                        </span>
+                        <Link
+                          className="font-label-md text-label-md text-primary font-semibold hover:underline"
+                          to="/panel-de-control"
+                        >
+                          Ver estado en el Panel
+                        </Link>
+                      </>
+                    )}
+                    {escrow.status === "disputed" && (
+                      <span className="font-body-md text-body-md text-on-surface">
+                        Custodia en disputa: resolvé el siguiente paso desde el Panel de Control.
+                      </span>
+                    )}
+                    {escrow.status === "refunded" && (
+                      <span className="font-body-md text-body-md text-on-surface">
+                        Custodia reembolsada al pagador: no admite más depósitos.
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[16px]">account_balance_wallet</span>
+                      {checkingBalance ? (
+                        <span>Leyendo tu saldo del token en testnet...</span>
+                      ) : balanceMissing ? (
+                        <span className="text-error font-semibold">
+                          Sin trustline/saldo del token de esta custodia: fondeá la cuenta primero.
+                        </span>
+                      ) : sacBalance !== undefined && sacBalance !== null ? (
+                        <span>
+                          Tu saldo del token: <strong className="text-on-surface">{sacBalance.toFixed(2)}</strong> (necesitás {requiredAmount.toFixed(2)})
+                          {balanceInsufficient && (
+                            <strong className="text-error"> — saldo insuficiente, fondeá la cuenta primero.</strong>
+                          )}
+                        </span>
+                      ) : (
+                        <span>Verificando tu saldo del token para habilitar el depósito...</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => void handleDeposit()}
+                      disabled={deposited || depositing || checkingBalance || balanceMissing || balanceInsufficient}
+                      className={`w-full py-4 px-space-lg rounded-xl font-headline-sm text-headline-sm font-bold flex items-center justify-center gap-space-sm transition-all active:scale-[0.99] ${
+                        deposited
+                          ? "bg-surface-container-high text-on-surface-variant cursor-default"
+                          : "bg-secondary hover:bg-on-secondary-container text-on-secondary shadow-[0_10px_20px_-5px_rgba(0,108,74,0.3)] cursor-pointer disabled:opacity-60"
+                      }`}
+                    >
+                      {depositing ? (
+                        <>
+                          <span className="material-symbols-outlined text-[24px] animate-spin">progress_activity</span>
+                          <span>Firmando depósito en Freighter...</span>
+                        </>
+                      ) : deposited ? (
+                        <>
+                          <span className="material-symbols-outlined text-[24px] text-secondary">check_circle</span>
+                          <span>Fondos Depositados en Custodia</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[24px]">shield</span>
+                          <span>Depositar {formatLatamCurrency(escrow.totalAmount)} en Custodia Protegida</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
 
                 {/* Success Alert */}
                 {deposited && txState.txHash && (
