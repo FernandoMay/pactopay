@@ -21,11 +21,23 @@ export function isFreighterAvailable(): boolean {
 /**
  * Authoritative availability check via the official Freighter API.
  * Resolves true when the extension is installed and reachable.
+ *
+ * The package resolves "not installed" via a message timeout that can hang
+ * indefinitely without the extension, which used to freeze the UI with zero
+ * feedback — so the check races against a local timeout and treats a timeout
+ * as "not installed".
  */
+const FREIGHTER_CHECK_TIMEOUT_MS = 6000;
+
 export async function isFreighterInstalled(): Promise<boolean> {
   try {
-    const res = await freighterIsConnected();
-    return res.isConnected === true;
+    const res = await Promise.race([
+      freighterIsConnected(),
+      new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), FREIGHTER_CHECK_TIMEOUT_MS)
+      ),
+    ]);
+    return res !== null && res.isConnected === true;
   } catch {
     return false;
   }

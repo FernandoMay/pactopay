@@ -439,7 +439,7 @@ export function CrearFactura() {
                   <input
                     className="w-full h-12 pl-8 pr-28 rounded-lg bg-surface-container-low text-on-surface font-title-lg text-title-lg font-bold focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all shadow-inner"
                     min="10"
-                    step="50"
+                    step="1"
                     type="number"
                     value={amount}
                     onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
