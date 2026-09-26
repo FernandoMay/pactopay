@@ -511,7 +511,7 @@ export function CrearFactura() {
                   ))}
                 </div>
                 <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  Si el cliente no solicita correcciones dentro de este plazo, la custodia se autoliquida a tu favor.
+                  El plazo queda registrado en la factura como acuerdo entre partes. La liberación se aprueba en el Panel de Control; no hay autoliquidación automática en el contrato.
                 </p>
               </div>
 
